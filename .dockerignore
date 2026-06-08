@@ -1,0 +1,10 @@
+**/target/
+**/node_modules/
+.git/
+.github/
+.idea/
+*.iml
+.vscode/
+*.log
+.env
+*.env

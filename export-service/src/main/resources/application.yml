@@ -1,0 +1,117 @@
+server:
+  port: 8087
+
+spring:
+  application:
+    name: export-service
+  # Local development uses the backing services from docker-compose.infra.yml.
+  profiles:
+    default: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-}]"
+
+# Rendered documents are stored in S3-compatible object storage and served via
+# signed URLs (Requirement 21.5).
+aisa:
+  export:
+    render-timeout-seconds: 30
+
+---
+# ===================== dev =====================
+# Points at docker-compose.infra.yml backing services on localhost.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/aisa
+    username: aisa
+    password: aisapw
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+
+aisa:
+  export:
+    storage:
+      endpoint: ${STORAGE_ENDPOINT:http://localhost:9000}
+      bucket: ${STORAGE_BUCKET:aisa-exports}
+      access-key: ${STORAGE_ACCESS_KEY:minioadmin}
+      secret-key: ${STORAGE_SECRET_KEY:minioadmin}
+
+logging:
+  level:
+    com.aisa: DEBUG
+
+---
+# ===================== staging =====================
+spring:
+  config:
+    activate:
+      on-profile: staging
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME:aisa}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+aisa:
+  export:
+    storage:
+      endpoint: ${STORAGE_ENDPOINT}
+      bucket: ${STORAGE_BUCKET}
+      access-key: ${STORAGE_ACCESS_KEY}
+      secret-key: ${STORAGE_SECRET_KEY}
+
+logging:
+  level:
+    root: INFO
+    com.aisa: INFO
+
+---
+# ===================== prod =====================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME:aisa}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+
+aisa:
+  export:
+    storage:
+      endpoint: ${STORAGE_ENDPOINT}
+      bucket: ${STORAGE_BUCKET}
+      access-key: ${STORAGE_ACCESS_KEY}
+      secret-key: ${STORAGE_SECRET_KEY}
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    com.aisa: INFO

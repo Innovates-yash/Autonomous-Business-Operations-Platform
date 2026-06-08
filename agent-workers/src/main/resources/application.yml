@@ -1,0 +1,108 @@
+server:
+  port: 8090
+
+spring:
+  application:
+    name: agent-workers
+  # Local development uses the backing services from docker-compose.infra.yml.
+  profiles:
+    default: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-}]"
+
+# Each agent invocation is bounded at 120s with up to 4 attempts (Requirements 6.3, 6.5).
+aisa:
+  agent:
+    invocation-timeout-seconds: 120
+    max-attempts: 4
+
+---
+# ===================== dev =====================
+# Points at docker-compose.infra.yml backing services on localhost.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  datasource:
+    url: jdbc:mysql://localhost:3306/aisa
+    username: aisa
+    password: aisapw
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: agent-workers
+      auto-offset-reset: earliest
+
+logging:
+  level:
+    com.aisa: DEBUG
+
+---
+# ===================== staging =====================
+spring:
+  config:
+    activate:
+      on-profile: staging
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME:aisa}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: agent-workers
+      auto-offset-reset: earliest
+
+logging:
+  level:
+    root: INFO
+    com.aisa: INFO
+
+---
+# ===================== prod =====================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  datasource:
+    url: jdbc:mysql://${DB_HOST}:${DB_PORT:3306}/${DB_NAME:aisa}
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: agent-workers
+      auto-offset-reset: latest
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    com.aisa: INFO

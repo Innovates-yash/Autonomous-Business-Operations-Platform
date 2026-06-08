@@ -1,0 +1,20 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'aisa-services'
+    metrics_path: '/actuator/prometheus'
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8080'  # api-gateway
+          - 'host.docker.internal:8081'  # auth-service
+          - 'host.docker.internal:8082'  # project-service
+          - 'host.docker.internal:8083'  # orchestrator-service
+          - 'host.docker.internal:8084'  # ai-provider-gateway
+          - 'host.docker.internal:8085'  # ai-chat-service
+          - 'host.docker.internal:8086'  # blueprint-service
+          - 'host.docker.internal:8087'  # export-service
+          - 'host.docker.internal:8088'  # notification-service
+          - 'host.docker.internal:8089'  # audit-service
+          - 'host.docker.internal:8090'  # agent-workers

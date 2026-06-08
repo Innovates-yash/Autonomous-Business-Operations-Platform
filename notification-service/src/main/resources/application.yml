@@ -1,0 +1,90 @@
+server:
+  port: 8088
+
+spring:
+  application:
+    name: notification-service
+  # Local development uses the backing services from docker-compose.infra.yml.
+  profiles:
+    default: dev
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-}]"
+
+---
+# ===================== dev =====================
+# Points at docker-compose.infra.yml backing services on localhost.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  data:
+    redis:
+      host: localhost
+      port: 6379
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: latest
+
+logging:
+  level:
+    com.aisa: DEBUG
+
+---
+# ===================== staging =====================
+spring:
+  config:
+    activate:
+      on-profile: staging
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: latest
+
+logging:
+  level:
+    root: INFO
+    com.aisa: INFO
+
+---
+# ===================== prod =====================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+    consumer:
+      group-id: notification-service
+      auto-offset-reset: latest
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    com.aisa: INFO

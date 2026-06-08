@@ -1,0 +1,152 @@
+server:
+  port: 8080
+  # TLS termination at the edge (Requirement 25.1). Disabled by default so local dev can
+  # run over plaintext; staging/prod enable it via the GATEWAY_SSL_* environment values.
+  # When TLS is instead terminated by an upstream load balancer/ingress, leave this off
+  # and rely on the forwarded-protocol headers enforced by SecureTransportWebFilter.
+  ssl:
+    enabled: ${GATEWAY_SSL_ENABLED:false}
+    key-store: ${GATEWAY_SSL_KEYSTORE:}
+    key-store-password: ${GATEWAY_SSL_KEYSTORE_PASSWORD:}
+    key-store-type: ${GATEWAY_SSL_KEYSTORE_TYPE:PKCS12}
+    key-alias: ${GATEWAY_SSL_KEY_ALIAS:gateway}
+  # Honor X-Forwarded-* so the gateway can detect upstream TLS termination.
+  forward-headers-strategy: framework
+
+spring:
+  application:
+    name: api-gateway
+  # Local development uses the backing services from docker-compose.infra.yml.
+  profiles:
+    default: dev
+  cloud:
+    gateway:
+      # Trust and use X-Forwarded-* headers from upstream proxies for scheme detection.
+      forwarded:
+        enabled: true
+      x-forwarded:
+        enabled: true
+      routes:
+        # ----- WebSocket upgrade passthrough for /ws/* (STOMP) -----
+        # ws:// scheme routes make Spring Cloud Gateway proxy the HTTP Upgrade handshake.
+        - id: ws-chat
+          uri: ${SERVICES_CHAT_WS_URI:ws://localhost:8085}
+          predicates:
+            - Path=/ws/chat/**
+        - id: ws-notifications
+          uri: ${SERVICES_NOTIFICATION_WS_URI:ws://localhost:8088}
+          predicates:
+            - Path=/ws/notifications/**
+        # ----- REST passthrough to downstream services -----
+        - id: auth-service
+          uri: ${SERVICES_AUTH_URI:http://localhost:8081}
+          predicates:
+            - Path=/api/auth/**
+        - id: project-service
+          uri: ${SERVICES_PROJECT_URI:http://localhost:8082}
+          predicates:
+            - Path=/api/projects/**
+        - id: orchestrator-service
+          uri: ${SERVICES_ORCHESTRATOR_URI:http://localhost:8083}
+          predicates:
+            - Path=/api/orchestrator/**
+        - id: ai-chat-service
+          uri: ${SERVICES_CHAT_URI:http://localhost:8085}
+          predicates:
+            - Path=/api/chat/**
+        - id: blueprint-service
+          uri: ${SERVICES_BLUEPRINT_URI:http://localhost:8086}
+          predicates:
+            - Path=/api/blueprints/**
+        - id: export-service
+          uri: ${SERVICES_EXPORT_URI:http://localhost:8087}
+          predicates:
+            - Path=/api/exports/**
+        - id: audit-service
+          uri: ${SERVICES_AUDIT_URI:http://localhost:8089}
+          predicates:
+            - Path=/api/admin/audit/**
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-}]"
+
+# Edge transport-security enforcement (Requirements 25.1, 25.2). Disabled by default for
+# local development; staging and prod enable it to reject unencrypted connections.
+aisa:
+  gateway:
+    security:
+      require-secure-transport: ${GATEWAY_REQUIRE_SECURE_TRANSPORT:false}
+
+---
+# ===================== dev =====================
+# Redis backs edge rate limiting (Requirement 25.4); points at docker-compose.infra.yml.
+spring:
+  config:
+    activate:
+      on-profile: dev
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+logging:
+  level:
+    com.aisa: DEBUG
+    org.springframework.cloud.gateway: DEBUG
+
+---
+# ===================== staging =====================
+spring:
+  config:
+    activate:
+      on-profile: staging
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+
+aisa:
+  gateway:
+    security:
+      require-secure-transport: ${GATEWAY_REQUIRE_SECURE_TRANSPORT:true}
+
+logging:
+  level:
+    root: INFO
+    com.aisa: INFO
+
+---
+# ===================== prod =====================
+spring:
+  config:
+    activate:
+      on-profile: prod
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+
+aisa:
+  gateway:
+    security:
+      require-secure-transport: ${GATEWAY_REQUIRE_SECURE_TRANSPORT:true}
+
+management:
+  endpoint:
+    health:
+      show-details: never
+
+logging:
+  level:
+    root: WARN
+    com.aisa: INFO
