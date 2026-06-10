@@ -21,6 +21,17 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{correlationId:-}]"
 
+# Token strategy (Requirements 1.3-1.7). The HMAC secret is shared with the API Gateway's
+# JwtVerifier so access tokens signed here verify at the edge (set the same value in
+# GATEWAY_JWT_SECRET). TTLs are fixed by Requirements 1.4 (15m) and 1.5 (7d).
+aisa:
+  auth:
+    token:
+      secret: ${AUTH_JWT_SECRET:}
+      issuer: ${AUTH_JWT_ISSUER:aisa-auth}
+      access-token-ttl: PT15M
+      refresh-token-ttl: P7D
+
 ---
 # ===================== dev =====================
 # Points at docker-compose.infra.yml backing services on localhost.
@@ -45,6 +56,13 @@ spring:
     consumer:
       group-id: auth-service
       auto-offset-reset: earliest
+
+# Dev-only default signing secret (>= 32 bytes for HS256). Override via AUTH_JWT_SECRET in
+# every shared environment; never rely on this value outside local development.
+aisa:
+  auth:
+    token:
+      secret: ${AUTH_JWT_SECRET:dev-only-auth-secret-change-me-0123456789abcdef}
 
 logging:
   level:

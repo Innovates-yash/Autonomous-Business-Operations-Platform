@@ -25,7 +25,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 2.1 Implement Spring Cloud Gateway routing and TLS enforcement
     - Define routes to downstream services; terminate TLS; reject unencrypted connections; WebSocket upgrade passthrough for `/ws/*`
     - _Requirements: 25.1, 25.2, 27.1_
-  - [ ] 2.2 Implement JWT validation and correlation-id filters
+  - [x] 2.2 Implement JWT validation and correlation-id filters
     - Validate access tokens at the edge; generate correlation id when absent and propagate `X-Correlation-Id` downstream
     - _Requirements: 27.5, 27.6_
   - [ ] 2.3 Implement Redis-backed edge rate limiting
@@ -42,7 +42,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 3.1 Create auth entities and Flyway migration
     - Define User, Role, Permission, RefreshToken, LoginAttempt, OAuthIdentity
     - _Requirements: 1.1, 2.1_
-  - [ ] 3.2 Implement registration with validation
+  - [x] 3.2 Implement registration with validation
     - Email 1–254 chars, password 12–128 chars mixed classes, duplicate rejection, field-level validation errors, ≤5s
     - _Requirements: 1.1, 1.2, 1.12_
   - [ ] 3.3 Implement login, JWT/refresh issuance, and refresh rotation
@@ -111,7 +111,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 7.1 Create provider entities and uniform contract
     - Define ProviderConfig, ProviderSelection, ProviderUsageRecord; implement uniform complete/stream contract via Spring AI
     - _Requirements: 20.1, 20.4_
-  - [ ] 7.2 Implement provider selection and provider clients
+  - [x] 7.2 Implement provider selection and provider clients
     - Admin selection with 5s activation, reject unconfigured (retain prior); configure OpenAI/Gemini/Claude/Local LLM clients and stubs
     - _Requirements: 20.1, 20.2, 20.3_
   - [ ] 7.3 Implement unavailability detection, failover, and usage recording
@@ -283,7 +283,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 20.1 Create append-only audit store
     - Define AuditEvent with no UPDATE/DELETE grants; Kafka ingestion + write-once table
     - _Requirements: 23.1, 23.7_
-  - [ ] 20.2 Implement event recording and retry-or-abort
+  - [x] 20.2 Implement event recording and retry-or-abort
     - Record within 2s (user, action, target, UTC ms timestamp); retry 3x and reject originating action on exhaustion; retain ≥365 days
     - _Requirements: 23.1, 23.2, 23.3_
   - [ ] 20.3 Implement Admin-only query
@@ -352,7 +352,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - _Requirements: 25.6, 25.7_
 
 - [ ] 27. Observability — metrics, logging, tracing
-  - [ ] 27.1 Configure metrics and structured logging
+  - [x] 27.1 Configure metrics and structured logging
     - Micrometer + Prometheus (request count, errors, latency, ≤60s freshness); JSON logs (timestamp, severity, correlation-id, message) to ELK; Grafana dashboards
     - _Requirements: 27.1, 27.2, 27.3_
   - [ ] 27.2 Configure tracing and telemetry resilience

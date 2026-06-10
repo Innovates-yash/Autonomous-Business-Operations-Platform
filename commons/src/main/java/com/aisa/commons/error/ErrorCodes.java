@@ -31,6 +31,7 @@ public final class ErrorCodes {
 
     // AI provider / orchestration
     public static final String PROVIDER_UNAVAILABLE = "PROVIDER_UNAVAILABLE";
+    public static final String PROVIDER_NOT_CONFIGURED = "PROVIDER_NOT_CONFIGURED";
     public static final String AGENT_FAILED = "AGENT_FAILED";
     public static final String GENERATION_FAILED = "GENERATION_FAILED";
 

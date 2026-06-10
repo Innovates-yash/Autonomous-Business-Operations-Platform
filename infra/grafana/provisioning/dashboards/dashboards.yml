@@ -1,0 +1,15 @@
+# Grafana dashboard provider (Requirement 27.1).
+# Loads dashboard JSON files mounted at /var/lib/grafana/dashboards.
+apiVersion: 1
+
+providers:
+  - name: aisa
+    orgId: 1
+    folder: AISA
+    type: file
+    disableDeletion: false
+    allowUiUpdates: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

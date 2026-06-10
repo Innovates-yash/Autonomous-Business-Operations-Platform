@@ -17,6 +17,23 @@ management:
     tags:
       application: ${spring.application.name}
 
+# ===================== audit service =====================
+# Durable recording, ingestion topics, and retention policy (Req 23.1, 23.2, 23.3).
+audit:
+  recording:
+    # Up to 3 retries after the initial attempt (Req 23.2); small backoff keeps the
+    # worst-case recording time within the 2-second budget (Req 23.1).
+    retry-attempts: 3
+    retry-backoff-millis: 100
+  messaging:
+    events-topic: audit-events
+    rejections-topic: audit-rejections
+  retention:
+    # Minimum 365-day retention (Req 23.3). The store is append-only and never
+    # purges, so events are retained well beyond this floor.
+    minimum-days: 365
+    monitor-cron: "0 0 3 * * *"
+
 logging:
   pattern:
     level: "%5p [${spring.application.name},%X{correlationId:-}]"

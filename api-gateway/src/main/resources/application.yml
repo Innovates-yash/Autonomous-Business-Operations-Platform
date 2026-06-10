@@ -80,12 +80,24 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{correlationId:-}]"
 
-# Edge transport-security enforcement (Requirements 25.1, 25.2). Disabled by default for
-# local development; staging and prod enable it to reject unencrypted connections.
+# Edge transport-security enforcement (Requirements 25.1, 25.2) and edge JWT validation.
+# Transport enforcement is disabled by default for local development; staging and prod
+# enable it to reject unencrypted connections. JWT access tokens are validated at the edge
+# and the verified principal is forwarded downstream; public routes (auth endpoints, health)
+# bypass validation. The correlation filter (Req 27.5, 27.6) needs no configuration.
 aisa:
   gateway:
     security:
       require-secure-transport: ${GATEWAY_REQUIRE_SECURE_TRANSPORT:false}
+      # public-paths defaults are defined in GatewaySecurityProperties; override here if needed.
+      jwt:
+        enabled: ${GATEWAY_JWT_ENABLED:true}
+        # Symmetric secret shared with the Auth Service (HS256). Prefer an RSA public key in
+        # production via GATEWAY_JWT_PUBLIC_KEY for asymmetric verification.
+        secret: ${GATEWAY_JWT_SECRET:}
+        public-key: ${GATEWAY_JWT_PUBLIC_KEY:}
+        issuer: ${GATEWAY_JWT_ISSUER:}
+        clock-skew-seconds: ${GATEWAY_JWT_CLOCK_SKEW_SECONDS:60}
 
 ---
 # ===================== dev =====================
@@ -98,6 +110,15 @@ spring:
     redis:
       host: localhost
       port: 6379
+
+# Local development runs without the Auth Service; edge JWT validation is disabled so the
+# gateway can be exercised standalone. Enable it by setting GATEWAY_JWT_ENABLED=true and a
+# secret/public key once the Auth Service is available.
+aisa:
+  gateway:
+    security:
+      jwt:
+        enabled: ${GATEWAY_JWT_ENABLED:false}
 
 logging:
   level:

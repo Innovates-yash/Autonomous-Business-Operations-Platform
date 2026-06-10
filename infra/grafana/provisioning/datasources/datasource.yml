@@ -1,0 +1,14 @@
+# Grafana datasource provisioning (Requirement 27.1).
+# Wires Grafana to the Prometheus instance defined in docker-compose.infra.yml.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: aisa-prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    editable: true
+    jsonData:
+      timeInterval: 15s

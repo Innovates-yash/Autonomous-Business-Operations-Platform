@@ -23,6 +23,29 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
         </dependency>
+
+        <!-- Structured JSON logging to Logstash/ELK (Requirement 27.3). Shared here so
+             every service that depends on commons inherits the JSON encoder on its
+             classpath alongside the shared logback-spring.xml. -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+        </dependency>
+
+        <!-- Micrometer metrics customization (Requirements 27.1, 27.2). Optional so it is
+             not forced transitively onto consumers; every service already brings
+             micrometer-registry-prometheus, which supplies micrometer-core at runtime. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>

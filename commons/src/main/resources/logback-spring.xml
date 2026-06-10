@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Shared logging configuration for every AISA service.
+
+  It lives in the commons module so all services that depend on commons inherit it from
+  the classpath without per-service duplication (Requirement 27.3).
+
+  Two appenders, by design:
+    * CONSOLE  - human-readable output that honours the existing `logging.pattern.level`
+                 already defined in each service's application.yml (service name +
+                 correlationId MDC value). Kept for local development. Existing config is
+                 extended, not removed.
+    * LOGSTASH - structured JSON shipped to Logstash/ELK over TCP, where each entry carries
+                 a timestamp, severity, correlation identifier, service name and message
+                 (Requirement 27.3). The TCP appender buffers and reconnects in the
+                 background, so if Logstash is unreachable the application keeps serving and
+                 logging continues via CONSOLE (Requirement 27.7).
+
+  The Logstash destination and toggle are configurable via Spring properties /
+  environment, defaulting to the docker-compose.infra.yml Logstash TCP input on :5000.
+-->
+<configuration>
+    <!-- Spring Boot defaults: colour converters, log levels, and the CONSOLE appender
+         that consumes `logging.pattern.level` from application.yml. -->
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+    <include resource="org/springframework/boot/logging/logback/console-appender.xml"/>
+
+    <springProperty scope="context" name="appName"
+                    source="spring.application.name" defaultValue="unknown-service"/>
+    <springProperty scope="context" name="logstashDestination"
+                    source="logstash.destination" defaultValue="localhost:5000"/>
+
+    <!-- Structured JSON appender. The encoder emits timestamp, severity, correlationId
+         (from MDC) and message; the service name is added as a constant field. -->
+    <appender name="LOGSTASH" class="net.logstash.logback.appender.LogstashTcpSocketAppender">
+        <destination>${logstashDestination}</destination>
+        <keepAliveDuration>5 minutes</keepAliveDuration>
+        <reconnectionDelay>10 seconds</reconnectionDelay>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <!-- Propagate MDC values (includes the correlationId set per request). -->
+            <includeMdc>true</includeMdc>
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <level>severity</level>
+                <message>message</message>
+                <logger>logger</logger>
+                <thread>thread</thread>
+            </fieldNames>
+            <!-- Constant field identifying the originating service. -->
+            <customFields>{"service":"${appName}"}</customFields>
+        </encoder>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <!-- Ship JSON logs to ELK. The TCP appender reconnects in the background, so an
+             unreachable Logstash never blocks request processing (Requirement 27.7). -->
+        <appender-ref ref="LOGSTASH"/>
+    </root>
+</configuration>

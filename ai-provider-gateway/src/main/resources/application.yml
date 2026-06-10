@@ -26,6 +26,15 @@ logging:
 aisa:
   provider:
     timeout-seconds: 30
+    # Deterministic stub clients are registered for every provider by default so the gateway
+    # is always routable without external API credentials (Req 20.1). Set to false in
+    # environments where only real provider clients should serve traffic.
+    stub:
+      enabled: true
+    selection:
+      # How often each instance re-reads the persisted active selection so a selection saved
+      # elsewhere takes effect within 5s (Req 20.2).
+      refresh-ms: 2000
 
 ---
 # ===================== dev =====================
