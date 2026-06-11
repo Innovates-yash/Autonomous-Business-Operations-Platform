@@ -4,6 +4,7 @@ import com.aisa.commons.correlation.CorrelationContext;
 import com.aisa.commons.error.ApiError;
 import com.aisa.commons.error.ErrorCodes;
 import com.aisa.project.security.MissingPrincipalException;
+import com.aisa.project.service.InvalidStateTransitionException;
 import com.aisa.project.service.ProjectNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
@@ -61,6 +62,17 @@ public class ProjectExceptionHandler {
                 "Authenticated principal is required",
                 correlationId(request));
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    /** Invalid state transition — current state is preserved (Requirement 3.10). */
+    @ExceptionHandler(InvalidStateTransitionException.class)
+    public ResponseEntity<ApiError> handleInvalidStateTransition(
+            InvalidStateTransitionException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.INVALID_STATE_TRANSITION,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
     }
 
     private static String correlationId(HttpServletRequest request) {

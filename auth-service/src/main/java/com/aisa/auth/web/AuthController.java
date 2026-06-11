@@ -1,9 +1,11 @@
 package com.aisa.auth.web;
 
 import com.aisa.auth.service.AuthenticationService;
+import com.aisa.auth.service.OAuth2ExchangeService;
 import com.aisa.auth.service.RegistrationService;
 import com.aisa.auth.web.dto.LoginRequest;
 import com.aisa.auth.web.dto.LogoutRequest;
+import com.aisa.auth.web.dto.OAuth2CallbackRequest;
 import com.aisa.auth.web.dto.RefreshRequest;
 import com.aisa.auth.web.dto.RegistrationRequest;
 import com.aisa.auth.web.dto.RegistrationResponse;
@@ -19,8 +21,9 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * Authentication HTTP API: registration (Requirements 1.1, 1.2, 1.12), login and
  * token issuance (Requirements 1.3, 1.4, 1.5, 1.9), refresh rotation (Requirements
- * 1.6, 1.7), and sign-out invalidation (Requirement 1.10). Account lockout
- * (Requirements 1.11, 1.14) is delivered by a separate task.
+ * 1.6, 1.7), sign-out invalidation (Requirement 1.10), and OAuth2 authorization-code
+ * exchange (Requirements 1.8, 1.13). Account lockout (Requirements 1.11, 1.14)
+ * is delivered by a separate task.
  */
 @RestController
 @RequestMapping("/api/auth")
@@ -28,12 +31,15 @@ public class AuthController {
 
     private final RegistrationService registrationService;
     private final AuthenticationService authenticationService;
+    private final OAuth2ExchangeService oAuth2ExchangeService;
 
     public AuthController(
             RegistrationService registrationService,
-            AuthenticationService authenticationService) {
+            AuthenticationService authenticationService,
+            OAuth2ExchangeService oAuth2ExchangeService) {
         this.registrationService = registrationService;
         this.authenticationService = authenticationService;
+        this.oAuth2ExchangeService = oAuth2ExchangeService;
     }
 
     /**
@@ -80,5 +86,19 @@ public class AuthController {
     public ResponseEntity<Void> logout(@Valid @RequestBody LogoutRequest request) {
         authenticationService.logout(request.refreshToken());
         return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * OAuth2 authorization-code callback. Exchanges the authorization code with the
+     * external provider, retrieves user info, links or creates a Platform user, and
+     * issues access + refresh tokens within 10 seconds (Requirement 1.8). On exchange
+     * failure or denial, returns an authentication error with no tokens (Requirement 1.13).
+     */
+    @PostMapping("/oauth2/callback")
+    public ResponseEntity<TokenResponse> oauth2Callback(
+            @Valid @RequestBody OAuth2CallbackRequest request) {
+        TokenResponse response = oAuth2ExchangeService.exchange(
+                request.provider(), request.code(), request.redirectUri());
+        return ResponseEntity.ok(response);
     }
 }

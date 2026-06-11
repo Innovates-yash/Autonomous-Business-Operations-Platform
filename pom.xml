@@ -26,6 +26,7 @@
         <spring-ai.version>1.0.0-M3</spring-ai.version>
         <testcontainers.version>1.20.3</testcontainers.version>
         <logstash-logback-encoder.version>7.4</logstash-logback-encoder.version>
+        <jasypt-spring-boot.version>3.0.5</jasypt-spring-boot.version>
 
         <!-- Static analysis / dependency scan tooling versions -->
         <maven-checkstyle-plugin.version>3.5.0</maven-checkstyle-plugin.version>
@@ -89,6 +90,14 @@
                 <groupId>net.logstash.logback</groupId>
                 <artifactId>logstash-logback-encoder</artifactId>
                 <version>${logstash-logback-encoder.version}</version>
+            </dependency>
+            <!-- Jasypt: at-rest encryption for sensitive properties (Req 25.1, 25.3).
+                 Services can wrap any value with ENC(...) in application.yml and Jasypt
+                 decrypts it at startup using the encryptor password from JASYPT_ENCRYPTOR_PASSWORD. -->
+            <dependency>
+                <groupId>com.github.ulisesbocchio</groupId>
+                <artifactId>jasypt-spring-boot-starter</artifactId>
+                <version>${jasypt-spring-boot.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

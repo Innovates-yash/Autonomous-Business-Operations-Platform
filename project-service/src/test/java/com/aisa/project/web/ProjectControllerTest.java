@@ -13,8 +13,10 @@ import com.aisa.commons.domain.ProjectState;
 import com.aisa.commons.error.ErrorCodes;
 import com.aisa.project.domain.Project;
 import com.aisa.project.security.ProjectPrincipal;
+import com.aisa.project.service.InvalidStateTransitionException;
 import com.aisa.project.service.ProjectNotFoundException;
 import com.aisa.project.service.ProjectService;
+import com.aisa.project.service.ProjectStateMachineService;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -37,6 +39,9 @@ class ProjectControllerTest {
 
     @MockBean
     private ProjectService projectService;
+
+    @MockBean
+    private ProjectStateMachineService stateMachineService;
 
     private final UUID ownerId = UUID.randomUUID();
 
@@ -126,5 +131,67 @@ class ProjectControllerTest {
         mockMvc.perform(get("/api/projects/" + UUID.randomUUID()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value(ErrorCodes.AUTHORIZATION_DENIED));
+    }
+
+    @Test
+    void validTransitionReturns200WithFromAndToStates() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        Project inDraft = sampleProject("Food Delivery", "An app");
+        Project inAnalyzing = sampleProject("Food Delivery", "An app");
+        inAnalyzing.setState(ProjectState.ANALYZING);
+
+        when(projectService.getById(eq(projectId), any(ProjectPrincipal.class)))
+                .thenReturn(inDraft);
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.ANALYZING), any(ProjectPrincipal.class)))
+                .thenReturn(inAnalyzing);
+
+        mockMvc.perform(post("/api/projects/" + projectId + "/transitions")
+                        .header(ProjectController.USER_ID_HEADER, ownerId.toString())
+                        .header(ProjectController.USER_ROLE_HEADER, "PRODUCT_MANAGER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"targetState":"ANALYZING"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.fromState").value("DRAFT"))
+                .andExpect(jsonPath("$.toState").value("ANALYZING"))
+                .andExpect(jsonPath("$.name").value("Food Delivery"));
+    }
+
+    @Test
+    void invalidTransitionReturns409Conflict() throws Exception {
+        UUID projectId = UUID.randomUUID();
+        Project inDraft = sampleProject("Food Delivery", "An app");
+
+        when(projectService.getById(eq(projectId), any(ProjectPrincipal.class)))
+                .thenReturn(inDraft);
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.APPROVED), any(ProjectPrincipal.class)))
+                .thenThrow(new InvalidStateTransitionException(ProjectState.DRAFT, ProjectState.APPROVED));
+
+        mockMvc.perform(post("/api/projects/" + projectId + "/transitions")
+                        .header(ProjectController.USER_ID_HEADER, ownerId.toString())
+                        .header(ProjectController.USER_ROLE_HEADER, "PRODUCT_MANAGER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"targetState":"APPROVED"}
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.INVALID_STATE_TRANSITION))
+                .andExpect(jsonPath("$.message").value("Transition from DRAFT to APPROVED is not permitted"));
+    }
+
+    @Test
+    void transitionWithMissingTargetStateReturns400() throws Exception {
+        UUID projectId = UUID.randomUUID();
+
+        mockMvc.perform(post("/api/projects/" + projectId + "/transitions")
+                        .header(ProjectController.USER_ID_HEADER, ownerId.toString())
+                        .header(ProjectController.USER_ROLE_HEADER, "PRODUCT_MANAGER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.VALIDATION_ERROR));
     }
 }

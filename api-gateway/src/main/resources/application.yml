@@ -1,5 +1,7 @@
 server:
   port: 8080
+  # Defense-in-depth: cap request header size to 64 KB (Requirement 25.6).
+  max-http-request-header-size: 65536
   # TLS termination at the edge (Requirement 25.1). Disabled by default so local dev can
   # run over plaintext; staging/prod enable it via the GATEWAY_SSL_* environment values.
   # When TLS is instead terminated by an upstream load balancer/ingress, leave this off
@@ -12,6 +14,12 @@ server:
     key-alias: ${GATEWAY_SSL_KEY_ALIAS:gateway}
   # Honor X-Forwarded-* so the gateway can detect upstream TLS termination.
   forward-headers-strategy: framework
+  # Suppress internal details in Spring's default error responses (Requirement 25.7).
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
 
 spring:
   application:
@@ -19,6 +27,10 @@ spring:
   # Local development uses the backing services from docker-compose.infra.yml.
   profiles:
     default: dev
+  # Reactive codec memory limit: 1 MB (Requirement 25.6). This caps the in-memory
+  # buffered request body size for the reactive (Netty) stack.
+  codec:
+    max-in-memory-size: 1MB
   cloud:
     gateway:
       # Trust and use X-Forwarded-* headers from upstream proxies for scheme detection.
@@ -75,6 +87,17 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  # Distributed tracing to Zipkin (Requirements 27.4, 27.5). Each span carries a start time,
+  # duration and the originating service id (spring.application.name). Sampling is full by
+  # default (dev); staging/prod lower it and every value is environment-overridable. Emission
+  # is retried and fails open via commons' TracingResilienceAutoConfiguration (Req 27.7).
+  tracing:
+    enabled: ${TRACING_ENABLED:true}
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
 logging:
   pattern:
@@ -136,10 +159,22 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
 
+# Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
+jasypt:
+  encryptor:
+    password: ${JASYPT_ENCRYPTOR_PASSWORD}
+    algorithm: PBEWithHMACSHA512AndAES_256
+    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+
 aisa:
   gateway:
     security:
       require-secure-transport: ${GATEWAY_REQUIRE_SECURE_TRANSPORT:true}
+
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
 
 logging:
   level:
@@ -157,6 +192,13 @@ spring:
       host: ${REDIS_HOST}
       port: ${REDIS_PORT:6379}
 
+# Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
+jasypt:
+  encryptor:
+    password: ${JASYPT_ENCRYPTOR_PASSWORD}
+    algorithm: PBEWithHMACSHA512AndAES_256
+    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+
 aisa:
   gateway:
     security:
@@ -166,6 +208,9 @@ management:
   endpoint:
     health:
       show-details: never
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
 
 logging:
   level:

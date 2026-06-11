@@ -20,8 +20,30 @@
             <artifactId>spring-web</artifactId>
         </dependency>
         <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-webmvc</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-annotations</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Jakarta Validation API for ConstraintViolationException handling -->
+        <dependency>
+            <groupId>jakarta.validation</groupId>
+            <artifactId>jakarta.validation-api</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- Servlet API for HttpServletRequest access in exception handlers -->
+        <dependency>
+            <groupId>jakarta.servlet</groupId>
+            <artifactId>jakarta.servlet-api</artifactId>
+            <optional>true</optional>
         </dependency>
 
         <!-- Structured JSON logging to Logstash/ELK (Requirement 27.3). Shared here so
@@ -40,10 +62,34 @@
             <artifactId>micrometer-core</artifactId>
             <optional>true</optional>
         </dependency>
+
+        <!-- Distributed tracing (Requirement 27.4, 27.5, 27.7). The Brave bridge plus the
+             Zipkin reporter let every service that depends on commons emit spans (start
+             time, duration, originating service via spring.application.name) to Zipkin and
+             tie the X-Correlation-Id to the trace context. These are NOT optional: services
+             do not declare tracing libraries themselves, so they inherit them transitively
+             from here. Versions are managed by the Spring Boot / Micrometer Tracing BOMs. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-brave</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.zipkin.reporter2</groupId>
+            <artifactId>zipkin-reporter-brave</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-autoconfigure</artifactId>
             <optional>true</optional>
+        </dependency>
+
+        <!-- Jasypt: at-rest encryption for sensitive properties (Requirements 25.1, 25.3).
+             Inherited transitively by every service that depends on commons, enabling
+             ENC(...) wrapped values in application.yml. The encryptor password is sourced
+             from the JASYPT_ENCRYPTOR_PASSWORD environment variable. -->
+        <dependency>
+            <groupId>com.github.ulisesbocchio</groupId>
+            <artifactId>jasypt-spring-boot-starter</artifactId>
         </dependency>
 
         <dependency>

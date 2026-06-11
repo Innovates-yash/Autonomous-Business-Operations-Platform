@@ -1,8 +1,13 @@
 package com.aisa.auth.web;
 
+import com.aisa.auth.service.AccountLockedException;
+import com.aisa.auth.service.AdminOnlyOperationException;
 import com.aisa.auth.service.DuplicateAccountException;
 import com.aisa.auth.service.InvalidCredentialsException;
 import com.aisa.auth.service.InvalidRefreshTokenException;
+import com.aisa.auth.service.OAuth2ExchangeException;
+import com.aisa.auth.service.RoleNotFoundException;
+import com.aisa.auth.service.UserNotFoundException;
 import com.aisa.commons.correlation.CorrelationContext;
 import com.aisa.commons.error.ApiError;
 import com.aisa.commons.error.ErrorCodes;
@@ -39,6 +44,17 @@ public class AuthExceptionHandler {
         return ResponseEntity.badRequest().body(error);
     }
 
+    /** Account temporarily locked after repeated failed attempts (Requirements 1.11, 1.14). */
+    @ExceptionHandler(AccountLockedException.class)
+    public ResponseEntity<ApiError> handleAccountLocked(
+            AccountLockedException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.ACCOUNT_LOCKED,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
     /** Duplicate-account rejection (Requirement 1.2). */
     @ExceptionHandler(DuplicateAccountException.class)
     public ResponseEntity<ApiError> handleDuplicate(
@@ -73,6 +89,64 @@ public class AuthExceptionHandler {
                 ex.getMessage(),
                 correlationId(request));
         return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    /**
+     * OAuth2 authorization-code exchange failure or denial (Requirement 1.13). No
+     * Platform tokens are issued; the client receives an authentication error.
+     */
+    @ExceptionHandler(OAuth2ExchangeException.class)
+    public ResponseEntity<ApiError> handleOAuth2ExchangeFailure(
+            OAuth2ExchangeException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.AUTHENTICATION_FAILED,
+                "OAuth2 authentication failed",
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(error);
+    }
+
+    /** Non-Admin attempts an Admin-only operation (Requirement 2.7). */
+    @ExceptionHandler(AdminOnlyOperationException.class)
+    public ResponseEntity<ApiError> handleAdminOnly(
+            AdminOnlyOperationException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.AUTHORIZATION_DENIED,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    /** Target user not found during role assignment. */
+    @ExceptionHandler(UserNotFoundException.class)
+    public ResponseEntity<ApiError> handleUserNotFound(
+            UserNotFoundException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.NOT_FOUND,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /** Requested role does not exist. */
+    @ExceptionHandler(RoleNotFoundException.class)
+    public ResponseEntity<ApiError> handleRoleNotFound(
+            RoleNotFoundException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.NOT_FOUND,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /** Invalid role name that cannot be parsed to a RoleName enum. */
+    @ExceptionHandler(InvalidRoleNameException.class)
+    public ResponseEntity<ApiError> handleInvalidRoleName(
+            InvalidRoleNameException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.VALIDATION_ERROR,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.badRequest().body(error);
     }
 
     private static String correlationId(HttpServletRequest request) {

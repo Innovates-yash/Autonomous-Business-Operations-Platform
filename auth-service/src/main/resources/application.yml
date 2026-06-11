@@ -1,5 +1,17 @@
 server:
   port: 8081
+  # Defense-in-depth: cap request header size to 64 KB (Requirement 25.6).
+  max-http-request-header-size: 65536
+  # Request size limit: 1 MB (Requirement 25.6).
+  tomcat:
+    max-http-form-post-size: 1048576
+    max-swallow-size: 1048576
+  # Suppress internal details in Spring's default error responses (Requirement 25.7).
+  error:
+    include-stacktrace: never
+    include-message: never
+    include-binding-errors: never
+    include-exception: false
 
 spring:
   application:
@@ -7,6 +19,11 @@ spring:
   # Local development uses the backing services from docker-compose.infra.yml.
   profiles:
     default: dev
+  # Multipart upload size limit: 1 MB (Requirement 25.6).
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 1MB
 
 management:
   endpoints:
@@ -16,6 +33,17 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  # Distributed tracing to Zipkin (Requirements 27.4, 27.5). Each span carries a start time,
+  # duration and the originating service id (spring.application.name). Sampling is full by
+  # default (dev); staging/prod lower it and every value is environment-overridable. Emission
+  # is retried and fails open via commons' TracingResilienceAutoConfiguration (Req 27.7).
+  tracing:
+    enabled: ${TRACING_ENABLED:true}
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  zipkin:
+    tracing:
+      endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
 logging:
   pattern:
@@ -31,6 +59,18 @@ aisa:
       issuer: ${AUTH_JWT_ISSUER:aisa-auth}
       access-token-ttl: PT15M
       refresh-token-ttl: P7D
+    oauth2:
+      providers:
+        google:
+          token-uri: ${OAUTH2_GOOGLE_TOKEN_URI:https://oauth2.googleapis.com/token}
+          user-info-uri: ${OAUTH2_GOOGLE_USERINFO_URI:https://www.googleapis.com/oauth2/v3/userinfo}
+          client-id: ${OAUTH2_GOOGLE_CLIENT_ID:}
+          client-secret: ${OAUTH2_GOOGLE_CLIENT_SECRET:}
+        github:
+          token-uri: ${OAUTH2_GITHUB_TOKEN_URI:https://github.com/login/oauth/access_token}
+          user-info-uri: ${OAUTH2_GITHUB_USERINFO_URI:https://api.github.com/user}
+          client-id: ${OAUTH2_GITHUB_CLIENT_ID:}
+          client-secret: ${OAUTH2_GITHUB_CLIENT_SECRET:}
 
 ---
 # ===================== dev =====================
@@ -92,6 +132,32 @@ spring:
       group-id: auth-service
       auto-offset-reset: earliest
 
+# Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
+# Wrap any secret value with ENC(...) and Jasypt decrypts at startup.
+jasypt:
+  encryptor:
+    password: ${JASYPT_ENCRYPTOR_PASSWORD}
+    algorithm: PBEWithHMACSHA512AndAES_256
+    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+
+# Inter-service mTLS (Requirement 25.1). The service presents its own certificate
+# and validates peer certificates for internal communication.
+server:
+  ssl:
+    enabled: ${SERVICE_MTLS_ENABLED:true}
+    key-store: ${SERVICE_SSL_KEYSTORE:classpath:tls/auth-service.p12}
+    key-store-password: ${SERVICE_SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    client-auth: need
+    trust-store: ${SERVICE_SSL_TRUSTSTORE:classpath:tls/truststore.p12}
+    trust-store-password: ${SERVICE_SSL_TRUSTSTORE_PASSWORD}
+    trust-store-type: PKCS12
+
+management:
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
+
 logging:
   level:
     root: INFO
@@ -121,10 +187,32 @@ spring:
       group-id: auth-service
       auto-offset-reset: latest
 
+# Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
+jasypt:
+  encryptor:
+    password: ${JASYPT_ENCRYPTOR_PASSWORD}
+    algorithm: PBEWithHMACSHA512AndAES_256
+    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+
+# Inter-service mTLS (Requirement 25.1).
+server:
+  ssl:
+    enabled: ${SERVICE_MTLS_ENABLED:true}
+    key-store: ${SERVICE_SSL_KEYSTORE:classpath:tls/auth-service.p12}
+    key-store-password: ${SERVICE_SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    client-auth: need
+    trust-store: ${SERVICE_SSL_TRUSTSTORE:classpath:tls/truststore.p12}
+    trust-store-password: ${SERVICE_SSL_TRUSTSTORE_PASSWORD}
+    trust-store-type: PKCS12
+
 management:
   endpoint:
     health:
       show-details: never
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:0.1}
 
 logging:
   level:

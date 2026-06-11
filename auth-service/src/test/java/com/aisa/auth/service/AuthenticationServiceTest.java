@@ -4,15 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aisa.auth.config.AuthTokenProperties;
+import com.aisa.auth.domain.LoginAttempt;
 import com.aisa.auth.domain.RefreshToken;
 import com.aisa.auth.domain.Role;
 import com.aisa.auth.domain.RoleName;
 import com.aisa.auth.domain.User;
+import com.aisa.auth.repository.LoginAttemptRepository;
 import com.aisa.auth.repository.RefreshTokenRepository;
 import com.aisa.auth.repository.UserRepository;
 import com.aisa.auth.web.dto.TokenResponse;
@@ -54,6 +57,9 @@ class AuthenticationServiceTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
+    @Mock
+    private LoginAttemptRepository loginAttemptRepository;
+
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final SecretKey verifyKey =
             Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
@@ -71,7 +77,8 @@ class AuthenticationServiceTest {
 
         JwtService jwtService = new JwtService(tokenProperties);
         service = new AuthenticationService(
-                userRepository, refreshTokenRepository, passwordEncoder, jwtService, tokenProperties);
+                userRepository, refreshTokenRepository, loginAttemptRepository,
+                passwordEncoder, jwtService, tokenProperties);
     }
 
     private User userWithPassword(String rawPassword) {
@@ -86,6 +93,7 @@ class AuthenticationServiceTest {
         User user = userWithPassword(RAW_PASSWORD);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
         when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
         TokenResponse response = service.login("User@Example.com", RAW_PASSWORD);
 
@@ -121,6 +129,7 @@ class AuthenticationServiceTest {
     @Test
     void loginWithUnknownEmailThrowsUniformError() {
         when(userRepository.findByEmail("ghost@example.com")).thenReturn(Optional.empty());
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
 
         assertThatThrownBy(() -> service.login("ghost@example.com", RAW_PASSWORD))
                 .isInstanceOf(InvalidCredentialsException.class)
@@ -133,6 +142,9 @@ class AuthenticationServiceTest {
     void loginWithWrongPasswordThrowsSameUniformError() {
         User user = userWithPassword(RAW_PASSWORD);
         when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(loginAttemptRepository.countFailedAttemptsSince(eq("user@example.com"), any(Instant.class)))
+                .thenReturn(1L);
 
         assertThatThrownBy(() -> service.login("user@example.com", "WrongPassw0rd!"))
                 .isInstanceOf(InvalidCredentialsException.class)
@@ -147,6 +159,9 @@ class AuthenticationServiceTest {
         User user = new User("oauth@example.com", null, role);
         setId(user, 7L);
         when(userRepository.findByEmail("oauth@example.com")).thenReturn(Optional.of(user));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(loginAttemptRepository.countFailedAttemptsSince(eq("oauth@example.com"), any(Instant.class)))
+                .thenReturn(1L);
 
         assertThatThrownBy(() -> service.login("oauth@example.com", RAW_PASSWORD))
                 .isInstanceOf(InvalidCredentialsException.class);
@@ -258,5 +273,98 @@ class AuthenticationServiceTest {
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(e);
         }
+    }
+
+    // ==================== Account Lockout Tests (Requirements 1.11, 1.14) ====================
+
+    @Test
+    void loginLocksAccountAfterFiveFailedAttemptsInWindow() {
+        User user = userWithPassword(RAW_PASSWORD);
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+        // After recording the 5th failure, the count returns 5.
+        when(loginAttemptRepository.countFailedAttemptsSince(eq("user@example.com"), any(Instant.class)))
+                .thenReturn(5L);
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        assertThatThrownBy(() -> service.login("user@example.com", "WrongPassw0rd!"))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        // Account should now be locked.
+        assertThat(user.isAccountLocked()).isTrue();
+        assertThat(user.getLockExpiresAt()).isNotNull();
+        verify(userRepository).save(user);
+    }
+
+    @Test
+    void loginRejectsDuringLockoutWithoutEvaluatingCredentials() {
+        User user = userWithPassword(RAW_PASSWORD);
+        // Set the account as locked with a future expiration.
+        user.setAccountLocked(true);
+        user.setLockExpiresAt(Instant.now().plusSeconds(600));
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+
+        // Even with the CORRECT password, should be rejected as AccountLockedException.
+        assertThatThrownBy(() -> service.login("user@example.com", RAW_PASSWORD))
+                .isInstanceOf(AccountLockedException.class);
+
+        // BCrypt compare should never be called — we verify no refresh token was issued
+        // and no login attempt was recorded.
+        verify(refreshTokenRepository, never()).save(any());
+        verify(loginAttemptRepository, never()).save(any());
+    }
+
+    @Test
+    void loginSucceedsAfterLockExpires() {
+        User user = userWithPassword(RAW_PASSWORD);
+        // Lock expired 1 second ago.
+        user.setAccountLocked(true);
+        user.setLockExpiresAt(Instant.now().minusSeconds(1));
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TokenResponse response = service.login("user@example.com", RAW_PASSWORD);
+
+        assertThat(response.accessToken()).isNotBlank();
+        // Lock state should have been cleared.
+        assertThat(user.isAccountLocked()).isFalse();
+        assertThat(user.getLockExpiresAt()).isNull();
+    }
+
+    @Test
+    void successfulLoginClearsLockState() {
+        User user = userWithPassword(RAW_PASSWORD);
+        // User previously had a lock that expired, but the flag wasn't cleared yet by another path.
+        user.setAccountLocked(true);
+        user.setLockExpiresAt(Instant.now().minusSeconds(60));
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(refreshTokenRepository.save(any(RefreshToken.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        TokenResponse response = service.login("user@example.com", RAW_PASSWORD);
+
+        assertThat(response.accessToken()).isNotBlank();
+        assertThat(user.isAccountLocked()).isFalse();
+        assertThat(user.getLockExpiresAt()).isNull();
+    }
+
+    @Test
+    void failedLoginRecordsAttemptButDoesNotLockWhenBelowThreshold() {
+        User user = userWithPassword(RAW_PASSWORD);
+        when(userRepository.findByEmail("user@example.com")).thenReturn(Optional.of(user));
+        when(loginAttemptRepository.save(any(LoginAttempt.class))).thenAnswer(inv -> inv.getArgument(0));
+        // Only 3 failures so far — below the threshold of 5.
+        when(loginAttemptRepository.countFailedAttemptsSince(eq("user@example.com"), any(Instant.class)))
+                .thenReturn(3L);
+
+        assertThatThrownBy(() -> service.login("user@example.com", "WrongPassw0rd!"))
+                .isInstanceOf(InvalidCredentialsException.class);
+
+        // Attempt recorded but account NOT locked.
+        verify(loginAttemptRepository).save(any(LoginAttempt.class));
+        assertThat(user.isAccountLocked()).isFalse();
     }
 }

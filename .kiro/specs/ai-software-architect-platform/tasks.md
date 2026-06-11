@@ -28,7 +28,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 2.2 Implement JWT validation and correlation-id filters
     - Validate access tokens at the edge; generate correlation id when absent and propagate `X-Correlation-Id` downstream
     - _Requirements: 27.5, 27.6_
-  - [ ] 2.3 Implement Redis-backed edge rate limiting
+  - [x] 2.3 Implement Redis-backed edge rate limiting
     - Enforce 100 req/min per authenticated client with 60s window reset and Retry-After header
     - _Requirements: 25.4, 25.5_
   - [ ]* 2.4 Write property test for correlation propagation
@@ -45,10 +45,10 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 3.2 Implement registration with validation
     - Email 1–254 chars, password 12–128 chars mixed classes, duplicate rejection, field-level validation errors, ≤5s
     - _Requirements: 1.1, 1.2, 1.12_
-  - [ ] 3.3 Implement login, JWT/refresh issuance, and refresh rotation
+  - [x] 3.3 Implement login, JWT/refresh issuance, and refresh rotation
     - JWT 15-min TTL, refresh 7-day TTL single-use rotation, uniform login error, logout invalidation, ≤5s
     - _Requirements: 1.3, 1.4, 1.5, 1.6, 1.7, 1.9, 1.10_
-  - [ ] 3.4 Implement account lockout
+  - [x] 3.4 Implement account lockout
     - Lock after 5 failed attempts in rolling 15-min window; reject attempts during lockout without credential evaluation
     - _Requirements: 1.11, 1.14_
   - [ ]* 3.5 Write property test for access token lifetime
@@ -91,10 +91,10 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 6.1 Create project entities
     - Define Project, Idea, Requirement, UseCase, ClarifyingQuestion, ProjectStateTransition
     - _Requirements: 3.1, 3.4_
-  - [ ] 6.2 Implement project CRUD with validation and scoping
+  - [x] 6.2 Implement project CRUD with validation and scoping
     - Create (name 1–200, desc 1–5000, Draft, owner), update, authorized list, get-or-404, field validation
     - _Requirements: 3.1, 3.2, 3.3, 3.6, 3.7, 3.11_
-  - [ ] 6.3 Implement state machine and transition recording
+  - [x] 6.3 Implement state machine and transition recording
     - Enforce permitted transitions, reject invalid with state preserved, record each transition with timestamp + user, archive with retention
     - _Requirements: 3.4, 3.5, 3.8, 3.9, 3.10_
   - [ ]* 6.4 Write property test for single project state
@@ -114,7 +114,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 7.2 Implement provider selection and provider clients
     - Admin selection with 5s activation, reject unconfigured (retain prior); configure OpenAI/Gemini/Claude/Local LLM clients and stubs
     - _Requirements: 20.1, 20.2, 20.3_
-  - [ ] 7.3 Implement unavailability detection, failover, and usage recording
+  - [x] 7.3 Implement unavailability detection, failover, and usage recording
     - Timeout (1–120s, default 30s) + 3 consecutive errors → unavailable; fail over up to 3 fallbacks in priority; provider-unavailable error preserving input; record provider+timestamp with ≥90-day retention
     - _Requirements: 20.5, 20.6, 20.7, 20.8_
   - [ ]* 7.4 Write property test for uniform provider contract
@@ -286,7 +286,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 20.2 Implement event recording and retry-or-abort
     - Record within 2s (user, action, target, UTC ms timestamp); retry 3x and reject originating action on exhaustion; retain ≥365 days
     - _Requirements: 23.1, 23.2, 23.3_
-  - [ ] 20.3 Implement Admin-only query
+  - [x] 20.3 Implement Admin-only query
     - Filter by user/action/time within 5s, empty set on no match, deny non-Admin, reject modification/deletion attempts
     - _Requirements: 23.4, 23.5, 23.6, 23.7_
   - [ ]* 20.4 Write property test for audit immutability
@@ -355,7 +355,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 27.1 Configure metrics and structured logging
     - Micrometer + Prometheus (request count, errors, latency, ≤60s freshness); JSON logs (timestamp, severity, correlation-id, message) to ELK; Grafana dashboards
     - _Requirements: 27.1, 27.2, 27.3_
-  - [ ] 27.2 Configure tracing and telemetry resilience
+  - [x] 27.2 Configure tracing and telemetry resilience
     - Zipkin spans (start, duration, service id) with correlation propagation; retry emission 3x without blocking requests
     - _Requirements: 27.4, 27.5, 27.7_
   - [ ]* 27.3 Write unit tests for log structure and telemetry resilience

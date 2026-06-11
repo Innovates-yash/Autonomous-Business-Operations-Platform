@@ -1,8 +1,10 @@
 package com.aisa.auth.service;
 
 import com.aisa.auth.config.AuthTokenProperties;
+import com.aisa.auth.domain.LoginAttempt;
 import com.aisa.auth.domain.RefreshToken;
 import com.aisa.auth.domain.User;
+import com.aisa.auth.repository.LoginAttemptRepository;
 import com.aisa.auth.repository.RefreshTokenRepository;
 import com.aisa.auth.repository.UserRepository;
 import com.aisa.auth.web.dto.TokenResponse;
@@ -10,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Base64;
 import java.util.List;
@@ -20,7 +23,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Authenticates users and manages the access/refresh token lifecycle
- * (Requirements 1.3, 1.5, 1.6, 1.7, 1.9, 1.10).
+ * (Requirements 1.3, 1.5, 1.6, 1.7, 1.9, 1.10, 1.11, 1.14).
  *
  * <p>Login verifies the BCrypt password hash and, on success, issues a signed JWT
  * access token together with an opaque refresh token whose SHA-256 hash is stored.
@@ -32,8 +35,9 @@ import org.springframework.transaction.annotation.Transactional;
  * tokens are rejected (Requirements 1.6, 1.7). Logout revokes the user's active
  * refresh tokens (Requirement 1.10).
  *
- * <p>Account lockout (Requirements 1.11, 1.14) is intentionally out of scope here and
- * delivered by a separate task.
+ * <p>Account lockout (Requirements 1.11, 1.14): after 5 failed attempts in a rolling
+ * 15-minute window the account is locked for 15 minutes. During lockout, login
+ * attempts are rejected immediately without evaluating credentials.
  */
 @Service
 public class AuthenticationService {
@@ -41,8 +45,15 @@ public class AuthenticationService {
     /** Refresh token entropy: 256 bits of secure randomness, URL-safe base64 encoded. */
     private static final int REFRESH_TOKEN_BYTES = 32;
 
+    /** Maximum failed login attempts before lockout (Requirement 1.11). */
+    static final int MAX_FAILED_ATTEMPTS = 5;
+
+    /** Rolling window and lockout duration (Requirement 1.11). */
+    static final Duration LOCKOUT_WINDOW = Duration.ofMinutes(15);
+
     private final UserRepository userRepository;
     private final RefreshTokenRepository refreshTokenRepository;
+    private final LoginAttemptRepository loginAttemptRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
     private final AuthTokenProperties tokenProperties;
@@ -51,11 +62,13 @@ public class AuthenticationService {
     public AuthenticationService(
             UserRepository userRepository,
             RefreshTokenRepository refreshTokenRepository,
+            LoginAttemptRepository loginAttemptRepository,
             PasswordEncoder passwordEncoder,
             JwtService jwtService,
             AuthTokenProperties tokenProperties) {
         this.userRepository = userRepository;
         this.refreshTokenRepository = refreshTokenRepository;
+        this.loginAttemptRepository = loginAttemptRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtService = jwtService;
         this.tokenProperties = tokenProperties;
@@ -64,25 +77,90 @@ public class AuthenticationService {
     /**
      * Verifies credentials and issues a new access/refresh token pair.
      *
+     * <p>Before evaluating credentials, checks whether the account is currently locked
+     * (Requirement 1.14). If locked and the lock has not expired, rejects immediately
+     * with {@link AccountLockedException} without evaluating credentials.
+     *
+     * <p>On failed login, records the attempt and locks the account if 5 failures
+     * occurred within the rolling 15-minute window (Requirement 1.11). On successful
+     * login, clears any existing lock state and resets the attempt counter.
+     *
      * @param email       the submitted email address
      * @param rawPassword the submitted plaintext password
      * @return the issued tokens
+     * @throws AccountLockedException      if the account is locked (Req 1.14)
      * @throws InvalidCredentialsException on any authentication failure (uniform, Req 1.9)
      */
     @Transactional
     public TokenResponse login(String email, String rawPassword) {
         String normalized = normalizeEmail(email);
+        Instant now = Instant.now();
 
         User user = userRepository.findByEmail(normalized).orElse(null);
-        // Verify a hash even when the user is unknown is unnecessary here, but the
-        // response/throw path is identical so the outcome is indistinguishable (Req 1.9).
+
+        // Requirement 1.14: reject locked accounts immediately without credential evaluation.
+        if (user != null && isAccountCurrentlyLocked(user, now)) {
+            throw new AccountLockedException();
+        }
+
+        // Credential evaluation.
         if (user == null
                 || user.getPasswordHash() == null
                 || !passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
+            // Record the failed attempt.
+            recordFailedAttempt(normalized, now);
+
+            // Check if lockout threshold is reached (Requirement 1.11).
+            if (user != null) {
+                Instant windowStart = now.minus(LOCKOUT_WINDOW);
+                long failedCount = loginAttemptRepository.countFailedAttemptsSince(normalized, windowStart);
+                if (failedCount >= MAX_FAILED_ATTEMPTS) {
+                    user.setAccountLocked(true);
+                    user.setLockExpiresAt(now.plus(LOCKOUT_WINDOW));
+                    userRepository.save(user);
+                }
+            }
+
             throw new InvalidCredentialsException();
         }
 
+        // Successful login: clear lockout state and record success.
+        clearLockoutState(user);
+        recordSuccessfulAttempt(normalized, now);
+
         return issueTokenPair(user);
+    }
+
+    /**
+     * Checks whether the account is currently in a locked state. If the lock has
+     * expired, clears the lock and returns false.
+     */
+    private boolean isAccountCurrentlyLocked(User user, Instant now) {
+        if (!user.isAccountLocked()) {
+            return false;
+        }
+        if (user.getLockExpiresAt() != null && user.getLockExpiresAt().isBefore(now)) {
+            // Lock expired — clear it.
+            clearLockoutState(user);
+            userRepository.save(user);
+            return false;
+        }
+        return true;
+    }
+
+    private void clearLockoutState(User user) {
+        user.setAccountLocked(false);
+        user.setLockExpiresAt(null);
+    }
+
+    private void recordFailedAttempt(String email, Instant now) {
+        LoginAttempt attempt = new LoginAttempt(email, false, null, now);
+        loginAttemptRepository.save(attempt);
+    }
+
+    private void recordSuccessfulAttempt(String email, Instant now) {
+        LoginAttempt attempt = new LoginAttempt(email, true, null, now);
+        loginAttemptRepository.save(attempt);
     }
 
     /**

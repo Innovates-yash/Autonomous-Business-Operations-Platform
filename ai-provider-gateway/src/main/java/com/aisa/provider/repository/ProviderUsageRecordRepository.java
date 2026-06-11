@@ -18,4 +18,18 @@ public interface ProviderUsageRecordRepository extends Repository<ProviderUsageR
     ProviderUsageRecord save(ProviderUsageRecord record);
 
     List<ProviderUsageRecord> findByServedAtAfter(Instant cutoff);
+
+    /**
+     * Count usage records served at or after {@code cutoff}. Used to assert that records inside
+     * the retention window are preserved (Req 20.8).
+     */
+    long countByServedAtGreaterThanEqual(Instant cutoff);
+
+    /**
+     * Prune records served before {@code cutoff}. The retention task derives {@code cutoff} from
+     * the configured retention period, which is held at or above 90 days (Req 20.8).
+     *
+     * @return the number of pruned records
+     */
+    long deleteByServedAtBefore(Instant cutoff);
 }
