@@ -94,4 +94,86 @@ class AuthControllerTest {
                 .andExpect(jsonPath("$.code").value(ErrorCodes.DUPLICATE_ACCOUNT));
     }
 
- 
+    @Test
+    void loginReturnsTokensOnSuccess() throws Exception {
+        when(authenticationService.login(any(), any()))
+                .thenReturn(new TokenResponse("access.jwt.token", "opaque-refresh", "Bearer", 900L));
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":"Abcdefg1!xyz"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("access.jwt.token"))
+                .andExpect(jsonPath("$.refreshToken").value("opaque-refresh"))
+                .andExpect(jsonPath("$.tokenType").value("Bearer"))
+                .andExpect(jsonPath("$.expiresInSeconds").value(900));
+    }
+
+    @Test
+    void loginWithInvalidCredentialsReturns401WithUniformError() throws Exception {
+        when(authenticationService.login(any(), any()))
+                .thenThrow(new InvalidCredentialsException());
+
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"user@example.com","password":"WrongPassw0rd!"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.AUTHENTICATION_FAILED))
+                // Message must not reveal whether email or password was wrong (Req 1.9).
+                .andExpect(jsonPath("$.message").value("Invalid email or password"));
+    }
+
+    @Test
+    void loginWithBlankFieldsReturns400() throws Exception {
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"email":"","password":""}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.VALIDATION_ERROR));
+    }
+
+    @Test
+    void refreshReturnsNewTokenPair() throws Exception {
+        when(authenticationService.refresh(any()))
+                .thenReturn(new TokenResponse("new.access.token", "new-refresh", "Bearer", 900L));
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"old-refresh"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").value("new.access.token"))
+                .andExpect(jsonPath("$.refreshToken").value("new-refresh"));
+    }
+
+    @Test
+    void refreshWithInvalidTokenReturns401() throws Exception {
+        when(authenticationService.refresh(any()))
+                .thenThrow(new InvalidRefreshTokenException());
+
+        mockMvc.perform(post("/api/auth/refresh")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"expired-or-used"}
+                                """))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.AUTHENTICATION_FAILED));
+    }
+
+    @Test
+    void logoutReturns204() throws Exception {
+        mockMvc.perform(post("/api/auth/logout")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"refreshToken":"some-refresh"}
+                                """))
+                .andExpect(status().isNoContent());
+    }
+}
