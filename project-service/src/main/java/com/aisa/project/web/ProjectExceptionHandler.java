@@ -3,6 +3,7 @@ package com.aisa.project.web;
 import com.aisa.commons.correlation.CorrelationContext;
 import com.aisa.commons.error.ApiError;
 import com.aisa.commons.error.ErrorCodes;
+import com.aisa.project.ai.AiAnalysisException;
 import com.aisa.project.security.MissingPrincipalException;
 import com.aisa.project.service.InvalidStateTransitionException;
 import com.aisa.project.service.ProjectNotFoundException;
@@ -21,7 +22,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * field failed, and per Requirements 3.6/3.7 an absent or inaccessible Project is
  * reported as not-found.
  */
-@RestControllerAdvice(assignableTypes = ProjectController.class)
+@RestControllerAdvice(assignableTypes = {ProjectController.class, AnalysisController.class})
 public class ProjectExceptionHandler {
 
     /** Field-level validation failures (Requirement 3.11). */
@@ -73,6 +74,17 @@ public class ProjectExceptionHandler {
                 ex.getMessage(),
                 correlationId(request));
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    /** AI provider failure during requirement analysis (Requirement 4.9). */
+    @ExceptionHandler(AiAnalysisException.class)
+    public ResponseEntity<ApiError> handleAiAnalysisFailure(
+            AiAnalysisException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.PROVIDER_UNAVAILABLE,
+                "Requirement analysis failed: " + ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(error);
     }
 
     private static String correlationId(HttpServletRequest request) {

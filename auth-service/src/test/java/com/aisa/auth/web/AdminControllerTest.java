@@ -27,6 +27,7 @@ import org.springframework.test.web.servlet.MockMvc;
  * - Non-Admin callers receive 403 (Requirement 2.7)
  * - Invalid role names receive 400
  * - Non-existent user receives 404
+ * - POST /api/admin/roles/assign endpoint (Requirements 2.7, 2.13, 2.14)
  */
 @WebMvcTest(AdminController.class)
 class AdminControllerTest {
@@ -36,6 +37,8 @@ class AdminControllerTest {
 
     @MockBean
     private RoleAssignmentService roleAssignmentService;
+
+    // ===== Tests for POST /api/admin/users/{userId}/role =====
 
     @Test
     void adminAssignsRoleSuccessfully() throws Exception {
@@ -118,5 +121,77 @@ class AdminControllerTest {
                                 {"role":"DEVELOPER"}
                                 """))
                 .andExpect(status().isBadRequest());
+    }
+
+    // ===== Tests for POST /api/admin/roles/assign =====
+
+    @Test
+    void assignEndpoint_adminAssignsRoleSuccessfully() throws Exception {
+        Role architectRole = new Role(RoleName.ARCHITECT);
+        User updatedUser = new User("user@example.com", "hash", architectRole);
+
+        when(roleAssignmentService.assignRole(eq(RoleName.ADMIN), eq(5L), eq(RoleName.ARCHITECT)))
+                .thenReturn(updatedUser);
+
+        mockMvc.perform(post("/api/admin/roles/assign")
+                        .header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":5,"targetRole":"ARCHITECT"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value("user@example.com"))
+                .andExpect(jsonPath("$.role").value("ARCHITECT"));
+    }
+
+    @Test
+    void assignEndpoint_nonAdminDenied() throws Exception {
+        when(roleAssignmentService.assignRole(eq(RoleName.DEVELOPER), eq(5L), eq(RoleName.CLIENT)))
+                .thenThrow(new AdminOnlyOperationException("Only Admin users may assign roles"));
+
+        mockMvc.perform(post("/api/admin/roles/assign")
+                        .header("X-User-Role", "DEVELOPER")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":5,"targetRole":"CLIENT"}
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.AUTHORIZATION_DENIED));
+    }
+
+    @Test
+    void assignEndpoint_missingUserIdReceives400() throws Exception {
+        mockMvc.perform(post("/api/admin/roles/assign")
+                        .header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"targetRole":"DEVELOPER"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.VALIDATION_ERROR));
+    }
+
+    @Test
+    void assignEndpoint_invalidTargetRoleReceives400() throws Exception {
+        mockMvc.perform(post("/api/admin/roles/assign")
+                        .header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":1,"targetRole":"INVALID_ROLE"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.VALIDATION_ERROR));
+    }
+
+    @Test
+    void assignEndpoint_missingTargetRoleReceives400() throws Exception {
+        mockMvc.perform(post("/api/admin/roles/assign")
+                        .header("X-User-Role", "ADMIN")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"userId":1}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(ErrorCodes.VALIDATION_ERROR));
     }
 }

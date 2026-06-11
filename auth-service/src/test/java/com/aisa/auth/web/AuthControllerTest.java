@@ -10,6 +10,7 @@ import com.aisa.auth.service.AuthenticationService;
 import com.aisa.auth.service.DuplicateAccountException;
 import com.aisa.auth.service.InvalidCredentialsException;
 import com.aisa.auth.service.InvalidRefreshTokenException;
+import com.aisa.auth.service.OAuth2ExchangeService;
 import com.aisa.auth.service.RegistrationService;
 import com.aisa.auth.web.dto.RegistrationResponse;
 import com.aisa.auth.web.dto.TokenResponse;
@@ -39,6 +40,9 @@ class AuthControllerTest {
 
     @MockBean
     private AuthenticationService authenticationService;
+
+    @MockBean
+    private OAuth2ExchangeService oAuth2ExchangeService;
 
     @Test
     void registersValidRequestAndReturns201() throws Exception {

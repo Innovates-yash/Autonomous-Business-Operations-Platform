@@ -3,15 +3,11 @@ package com.aisa.auth.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.aisa.auth.config.AuthTokenProperties;
-import com.aisa.auth.config.OAuth2ProviderProperties;
-import com.aisa.auth.config.OAuth2ProviderProperties.ProviderConfig;
 import com.aisa.auth.domain.OAuthIdentity;
 import com.aisa.auth.domain.RefreshToken;
 import com.aisa.auth.domain.Role;
@@ -25,18 +21,15 @@ import com.aisa.auth.web.dto.TokenResponse;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Map;
 import java.util.Optional;
-import java.util.function.Function;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.RestClient;
-import org.springframework.web.client.RestClientException;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 /**
  * Unit tests for {@link OAuth2ExchangeService}: successful exchange creates user
@@ -44,12 +37,16 @@ import org.springframework.web.client.RestClientException;
  * tokens (Requirement 1.13), and existing OAuth identity links to existing user.
  */
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class OAuth2ExchangeServiceTest {
 
     private static final String SECRET = "test-secret-test-secret-test-secret-1234567890";
     private static final String PROVIDER = "google";
     private static final String CODE = "auth-code-123";
     private static final String REDIRECT_URI = "http://localhost:3000/callback";
+
+    @Mock
+    private OAuthProviderClient providerClient;
 
     @Mock
     private OAuthIdentityRepository oauthIdentityRepository;
@@ -63,29 +60,7 @@ class OAuth2ExchangeServiceTest {
     @Mock
     private RefreshTokenRepository refreshTokenRepository;
 
-    @Mock
-    private RestClient.Builder restClientBuilder;
-
-    @Mock
-    private RestClient restClient;
-
-    @Mock
-    private RestClient.RequestBodyUriSpec requestBodyUriSpec;
-
-    @Mock
-    private RestClient.RequestBodySpec requestBodySpec;
-
-    @Mock
-    private RestClient.RequestHeadersUriSpec<?> requestHeadersUriSpec;
-
-    @Mock
-    private RestClient.RequestHeadersSpec<?> requestHeadersSpec;
-
-    @Mock
-    private RestClient.ResponseSpec responseSpec;
-
     private OAuth2ExchangeService service;
-    private OAuth2ProviderProperties providerProperties;
 
     @BeforeEach
     void setUp() {
@@ -97,20 +72,8 @@ class OAuth2ExchangeServiceTest {
 
         JwtService jwtService = new JwtService(tokenProperties);
 
-        ProviderConfig googleConfig = new ProviderConfig();
-        googleConfig.setTokenUri("https://oauth2.googleapis.com/token");
-        googleConfig.setUserInfoUri("https://www.googleapis.com/oauth2/v3/userinfo");
-        googleConfig.setClientId("google-client-id");
-        googleConfig.setClientSecret("google-client-secret");
-
-        providerProperties = new OAuth2ProviderProperties();
-        providerProperties.setProviders(Map.of("google", googleConfig));
-
-        when(restClientBuilder.build()).thenReturn(restClient);
-
         service = new OAuth2ExchangeService(
-                providerProperties,
-                restClientBuilder,
+                providerClient,
                 oauthIdentityRepository,
                 userRepository,
                 roleRepository,
@@ -121,10 +84,9 @@ class OAuth2ExchangeServiceTest {
 
     @Test
     void successfulExchangeCreatesNewUserAndIssuesTokens() {
-        // Arrange: mock the token exchange
-        setupTokenExchangeSuccess();
-        // Mock user info response
-        setupUserInfoSuccess("user@example.com", "google-sub-123");
+        // Arrange: provider client returns user info
+        when(providerClient.exchangeAndFetchUserInfo("google", CODE, REDIRECT_URI))
+                .thenReturn(new OAuthProviderClient.OAuthUserInfo("user@example.com", "google-sub-123"));
 
         // No existing OAuth identity
         when(oauthIdentityRepository.findByProviderAndProviderUserId("google", "google-sub-123"))
@@ -150,12 +112,13 @@ class OAuth2ExchangeServiceTest {
         assertThat(response.tokenType()).isEqualTo("Bearer");
         assertThat(response.expiresInSeconds()).isEqualTo(900L);
 
-        // User was created
+        // User was created with null passwordHash and GUEST role
         ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
         verify(userRepository).save(userCaptor.capture());
         User createdUser = userCaptor.getValue();
         assertThat(createdUser.getEmail()).isEqualTo("user@example.com");
-        assertThat(createdUser.getPasswordHash()).isNull(); // OAuth2-only account
+        assertThat(createdUser.getPasswordHash()).isNull();
+        assertThat(createdUser.getRole().getName()).isEqualTo(RoleName.GUEST);
 
         // OAuth identity was linked
         ArgumentCaptor<OAuthIdentity> identityCaptor = ArgumentCaptor.forClass(OAuthIdentity.class);
@@ -170,8 +133,9 @@ class OAuth2ExchangeServiceTest {
 
     @Test
     void exchangeFailureThrowsExceptionAndNoTokensIssued() {
-        // Arrange: token exchange fails with network error
-        setupTokenExchangeFailure(new RestClientException("Connection refused"));
+        // Arrange: provider client throws on exchange failure
+        when(providerClient.exchangeAndFetchUserInfo("google", CODE, REDIRECT_URI))
+                .thenThrow(new OAuth2ExchangeException("OAuth2 token exchange failed for provider 'google'"));
 
         // Act & Assert (Requirement 1.13)
         assertThatThrownBy(() -> service.exchange(PROVIDER, CODE, REDIRECT_URI))
@@ -185,8 +149,10 @@ class OAuth2ExchangeServiceTest {
 
     @Test
     void exchangeDeniedByProviderThrowsExceptionAndNoTokensIssued() {
-        // Arrange: provider returns an error response
-        setupTokenExchangeDenied();
+        // Arrange: provider denies access
+        when(providerClient.exchangeAndFetchUserInfo("google", CODE, REDIRECT_URI))
+                .thenThrow(new OAuth2ExchangeException(
+                        "OAuth2 token exchange denied by provider 'google': access_denied"));
 
         // Act & Assert (Requirement 1.13)
         assertThatThrownBy(() -> service.exchange(PROVIDER, CODE, REDIRECT_URI))
@@ -200,8 +166,8 @@ class OAuth2ExchangeServiceTest {
     @Test
     void existingOAuthIdentityLinksToExistingUser() {
         // Arrange
-        setupTokenExchangeSuccess();
-        setupUserInfoSuccess("existing@example.com", "google-sub-456");
+        when(providerClient.exchangeAndFetchUserInfo("google", CODE, REDIRECT_URI))
+                .thenReturn(new OAuthProviderClient.OAuthUserInfo("existing@example.com", "google-sub-456"));
 
         Role clientRole = new Role(RoleName.CLIENT);
         User existingUser = new User("existing@example.com", "somehash", clientRole);
@@ -228,8 +194,8 @@ class OAuth2ExchangeServiceTest {
     @Test
     void existingEmailWithoutOAuthLinkCreatesIdentityOnly() {
         // Arrange: email exists but no OAuth link for this provider
-        setupTokenExchangeSuccess();
-        setupUserInfoSuccess("existing@example.com", "google-sub-789");
+        when(providerClient.exchangeAndFetchUserInfo("google", CODE, REDIRECT_URI))
+                .thenReturn(new OAuthProviderClient.OAuthUserInfo("existing@example.com", "google-sub-789"));
 
         when(oauthIdentityRepository.findByProviderAndProviderUserId("google", "google-sub-789"))
                 .thenReturn(Optional.empty());
@@ -253,80 +219,36 @@ class OAuth2ExchangeServiceTest {
     }
 
     @Test
-    void unconfiguredProviderThrowsExchangeException() {
-        // Act & Assert
-        assertThatThrownBy(() -> service.exchange("unknown-provider", CODE, REDIRECT_URI))
+    void stubOAuthProviderClientWorksForDevTesting() {
+        // Verify the stub implementation works as expected
+        StubOAuthProviderClient stub = new StubOAuthProviderClient();
+
+        // Register a success
+        stub.registerSuccess("google", "test-code", "stub@example.com", "stub-subject-1");
+
+        OAuthProviderClient.OAuthUserInfo result =
+                stub.exchangeAndFetchUserInfo("google", "test-code", "http://localhost/callback");
+        assertThat(result.email()).isEqualTo("stub@example.com");
+        assertThat(result.subject()).isEqualTo("stub-subject-1");
+
+        // Register a failure
+        stub.registerFailure("google", "bad-code", "Access denied by provider");
+        assertThatThrownBy(() -> stub.exchangeAndFetchUserInfo("google", "bad-code", "http://localhost/callback"))
                 .isInstanceOf(OAuth2ExchangeException.class)
-                .hasMessageContaining("not configured");
+                .hasMessageContaining("Access denied by provider");
 
-        verify(refreshTokenRepository, never()).save(any());
-    }
-
-    @Test
-    void userInfoWithoutEmailThrowsExchangeException() {
-        // Arrange
-        setupTokenExchangeSuccess();
-        // User info returns no email
-        setupUserInfoResponseMap(Map.of("sub", "google-sub-noemail"));
-
-        // Act & Assert
-        assertThatThrownBy(() -> service.exchange(PROVIDER, CODE, REDIRECT_URI))
+        // Unregistered code fails with default message
+        assertThatThrownBy(() -> stub.exchangeAndFetchUserInfo("google", "unknown-code", "http://localhost/callback"))
                 .isInstanceOf(OAuth2ExchangeException.class)
-                .hasMessageContaining("did not return an email");
+                .hasMessageContaining("no response registered");
 
-        verify(refreshTokenRepository, never()).save(any());
+        // Reset clears all
+        stub.reset();
+        assertThatThrownBy(() -> stub.exchangeAndFetchUserInfo("google", "test-code", "http://localhost/callback"))
+                .isInstanceOf(OAuth2ExchangeException.class);
     }
 
     // ==================== Helper Methods ====================
-
-    @SuppressWarnings("unchecked")
-    private void setupTokenExchangeSuccess() {
-        when(restClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.header(anyString(), anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(eq(Map.class)))
-                .thenReturn(Map.of("access_token", "provider-access-token-xyz"));
-    }
-
-    @SuppressWarnings("unchecked")
-    private void setupTokenExchangeFailure(RestClientException exception) {
-        when(restClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.header(anyString(), anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenThrow(exception);
-    }
-
-    @SuppressWarnings("unchecked")
-    private void setupTokenExchangeDenied() {
-        when(restClient.post()).thenReturn(requestBodyUriSpec);
-        when(requestBodyUriSpec.uri(anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.header(anyString(), anyString())).thenReturn(requestBodySpec);
-        when(requestBodySpec.body(any())).thenReturn(requestBodySpec);
-        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
-        when(responseSpec.body(eq(Map.class)))
-                .thenReturn(Map.of("error", "access_denied", "error_description", "User denied access"));
-    }
-
-    @SuppressWarnings("unchecked")
-    private void setupUserInfoSuccess(String email, String subject) {
-        setupUserInfoResponseMap(Map.of("email", email, "sub", subject));
-    }
-
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private void setupUserInfoResponseMap(Map<String, Object> responseMap) {
-        RestClient.RequestHeadersUriSpec getSpec = org.mockito.Mockito.mock(RestClient.RequestHeadersUriSpec.class);
-        RestClient.RequestHeadersSpec headersSpec = org.mockito.Mockito.mock(RestClient.RequestHeadersSpec.class);
-        RestClient.ResponseSpec getResponseSpec = org.mockito.Mockito.mock(RestClient.ResponseSpec.class);
-
-        when(restClient.get()).thenReturn(getSpec);
-        when(getSpec.uri(anyString())).thenReturn(headersSpec);
-        when(headersSpec.header(anyString(), anyString())).thenReturn(headersSpec);
-        when(headersSpec.retrieve()).thenReturn(getResponseSpec);
-        when(getResponseSpec.body(eq(Map.class))).thenReturn(responseMap);
-    }
 
     private static void setId(User user, long id) {
         try {

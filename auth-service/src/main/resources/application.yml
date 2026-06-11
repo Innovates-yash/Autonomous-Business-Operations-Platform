@@ -72,6 +72,16 @@ aisa:
           client-id: ${OAUTH2_GITHUB_CLIENT_ID:}
           client-secret: ${OAUTH2_GITHUB_CLIENT_SECRET:}
 
+# Spring Session with Redis (Requirement 26.2). Sessions are stored under the
+# namespace "aisa:session:auth:" so any auth-service instance can serve any request.
+# The session store-type is set to redis; the namespace is configured via
+# @EnableRedisHttpSession in RedisSessionConfig.
+spring:
+  session:
+    store-type: redis
+    redis:
+      namespace: aisa:session:auth
+
 ---
 # ===================== dev =====================
 # Points at docker-compose.infra.yml backing services on localhost.

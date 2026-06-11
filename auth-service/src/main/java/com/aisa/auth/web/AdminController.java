@@ -3,6 +3,7 @@ package com.aisa.auth.web;
 import com.aisa.auth.domain.RoleName;
 import com.aisa.auth.domain.User;
 import com.aisa.auth.service.RoleAssignmentService;
+import com.aisa.auth.web.dto.RoleAssignRequest;
 import com.aisa.auth.web.dto.RoleAssignmentRequest;
 import com.aisa.auth.web.dto.RoleAssignmentResponse;
 import jakarta.validation.Valid;
@@ -33,7 +34,7 @@ public class AdminController {
     }
 
     /**
-     * Changes the role assigned to a user. Admin-only (Requirement 2.7).
+     * Changes the role assigned to a user (path-variable form). Admin-only (Requirement 2.7).
      *
      * <p>On success, the target user's active refresh tokens are revoked so the
      * new role's permissions take effect within 5 seconds (Requirements 2.13, 2.14).
@@ -53,6 +54,29 @@ public class AdminController {
         RoleName newRoleName = parseRoleName(request.role());
 
         User updated = roleAssignmentService.assignRole(callerRoleName, userId, newRoleName);
+        return ResponseEntity.ok(RoleAssignmentResponse.from(updated));
+    }
+
+    /**
+     * Assigns a role to a user (body-only form). Admin-only (Requirement 2.7).
+     *
+     * <p>Accepts {@code userId} and {@code targetRole} in the request body.
+     * On success, the target user's active refresh tokens are revoked so the
+     * new role's permissions take effect within 5 seconds (Requirements 2.13, 2.14).
+     *
+     * @param callerRole the role of the calling user (injected by gateway from JWT claims)
+     * @param request must contain userId and targetRole
+     * @return the updated user with their new role
+     */
+    @PostMapping("/roles/assign")
+    public ResponseEntity<RoleAssignmentResponse> assignRoleViaBody(
+            @RequestHeader(value = "X-User-Role") String callerRole,
+            @Valid @RequestBody RoleAssignRequest request) {
+
+        RoleName callerRoleName = parseRoleName(callerRole);
+        RoleName newRoleName = parseRoleName(request.targetRole());
+
+        User updated = roleAssignmentService.assignRole(callerRoleName, request.userId(), newRoleName);
         return ResponseEntity.ok(RoleAssignmentResponse.from(updated));
     }
 

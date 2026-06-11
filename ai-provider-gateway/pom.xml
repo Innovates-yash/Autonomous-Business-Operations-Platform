@@ -35,6 +35,12 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
+        <!-- Redis: caching for provider selection and health state so that all
+             instances share a consistent view (Req 26.2, 26.3). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
 
         <!-- Persistence: provider config, selection, and usage records (Req 20.8). -->
         <dependency>

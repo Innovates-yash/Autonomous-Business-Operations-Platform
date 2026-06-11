@@ -160,11 +160,28 @@ spring:
       port: ${REDIS_PORT:6379}
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
+# Wrap any secret value with ENC(...) and Jasypt decrypts at startup using
+# the encryptor password sourced from JASYPT_ENCRYPTOR_PASSWORD env var.
 jasypt:
   encryptor:
     password: ${JASYPT_ENCRYPTOR_PASSWORD}
     algorithm: PBEWithHMACSHA512AndAES_256
     iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+
+# Inter-service mTLS — outbound client identity (Requirement 25.1).
+# The gateway presents its own client certificate when calling downstream services
+# (which require client-auth: need). The server-side TLS for external clients is
+# configured in the base server.ssl block above.
+server:
+  ssl:
+    enabled: ${GATEWAY_SSL_ENABLED:true}
+    key-store: ${GATEWAY_SSL_KEYSTORE:classpath:tls/api-gateway.p12}
+    key-store-password: ${GATEWAY_SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    key-alias: ${GATEWAY_SSL_KEY_ALIAS:gateway}
+    trust-store: ${SERVICE_SSL_TRUSTSTORE:classpath:tls/truststore.p12}
+    trust-store-password: ${SERVICE_SSL_TRUSTSTORE_PASSWORD}
+    trust-store-type: PKCS12
 
 aisa:
   gateway:
@@ -198,6 +215,18 @@ jasypt:
     password: ${JASYPT_ENCRYPTOR_PASSWORD}
     algorithm: PBEWithHMACSHA512AndAES_256
     iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+
+# Inter-service mTLS — outbound client identity (Requirement 25.1).
+server:
+  ssl:
+    enabled: ${GATEWAY_SSL_ENABLED:true}
+    key-store: ${GATEWAY_SSL_KEYSTORE:classpath:tls/api-gateway.p12}
+    key-store-password: ${GATEWAY_SSL_KEYSTORE_PASSWORD}
+    key-store-type: PKCS12
+    key-alias: ${GATEWAY_SSL_KEY_ALIAS:gateway}
+    trust-store: ${SERVICE_SSL_TRUSTSTORE:classpath:tls/truststore.p12}
+    trust-store-password: ${SERVICE_SSL_TRUSTSTORE_PASSWORD}
+    trust-store-type: PKCS12
 
 aisa:
   gateway:

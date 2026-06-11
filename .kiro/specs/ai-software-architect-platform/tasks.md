@@ -65,13 +65,13 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - _Requirements: 1.2, 1.11, 1.12, 1.14_
 
 - [ ] 4. Auth Service — OAuth2 and authorization
-  - [ ] 4.1 Implement OAuth2 authorization-code flow
+  - [x] 4.1 Implement OAuth2 authorization-code flow
     - 10s issuance on success, error with no tokens on exchange failure/denial
     - _Requirements: 1.8, 1.13_
-  - [ ] 4.2 Implement role assignment and RBAC matrix
+  - [x] 4.2 Implement role assignment and RBAC matrix
     - Single role per user, Guest default, Admin-only assignment, prior-role cache invalidation, effect within 5s
     - _Requirements: 2.1, 2.2, 2.7, 2.8, 2.9, 2.10, 2.11, 2.12, 2.13, 2.14_
-  - [ ] 4.3 Implement authorization decision endpoint
+  - [x] 4.3 Implement authorization decision endpoint
     - permit/deny within 500ms, no state change on deny, no-role denial path
     - _Requirements: 2.3, 2.4, 2.5, 2.6_
   - [ ]* 4.4 Write property test for single role
@@ -341,10 +341,10 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - _Requirements: 24.6, 2.7, 20.2_
 
 - [ ] 26. Security hardening — validation and encryption
-  - [ ] 26.1 Implement global input validation and size limit
+  - [x] 26.1 Implement global input validation and size limit
     - 1 MB request size limit, per-service Bean Validation (type, required fields), safe error messages without internal details
     - _Requirements: 25.6, 25.7_
-  - [ ] 26.2 Implement encryption and credential protection
+  - [x] 26.2 Implement encryption and credential protection
     - At-rest encryption for sensitive data, inter-service mTLS, bcrypt password storage, SHA-256 refresh token hashing
     - _Requirements: 25.1, 25.3_
   - [ ]* 26.3 Write unit tests for validation safety and size limit

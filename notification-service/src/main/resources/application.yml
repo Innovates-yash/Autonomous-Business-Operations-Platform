@@ -49,6 +49,11 @@ logging:
   pattern:
     level: "%5p [${spring.application.name},%X{correlationId:-}]"
 
+# Redis key namespace convention for notification-service (Requirement 26.2):
+# - aisa:notify:subscriptions:<userId> — active WebSocket subscription registry
+# - aisa:notify:fanout:<projectId>    — last-event markers for resync on reconnect
+# All keys use the "aisa:notify:" prefix to isolate from session/cache/rate-limit data.
+
 ---
 # ===================== dev =====================
 # Points at docker-compose.infra.yml backing services on localhost.
