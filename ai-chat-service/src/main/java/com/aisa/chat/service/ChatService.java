@@ -11,8 +11,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Core service for chat message handling (Requirements 5.1, 5.2, 5.9).
- * Validates content, finds or creates a Conversation for the project,
- * persists the message with a UTC timestamp, and associates the user id.
+ * Validates content, looks up the Conversation by id, persists the message
+ * with a UTC timestamp, and associates the user id.
  */
 @Service
 public class ChatService {
@@ -27,18 +27,19 @@ public class ChatService {
     }
 
     /**
-     * Persists a user message in the conversation for the given project.
-     * Creates a new conversation if one does not already exist.
+     * Persists a user message in the given conversation.
      *
-     * @param userId    the authenticated user's identifier (from X-User-Id header)
-     * @param projectId the project the message belongs to
-     * @param content   validated content (1–10,000 chars)
+     * @param userId         the authenticated user's identifier (from X-User-Id header)
+     * @param conversationId the conversation to post the message to
+     * @param content        validated content (1–10,000 chars)
      * @return the persisted ChatMessage
+     * @throws jakarta.persistence.EntityNotFoundException if conversation does not exist
      */
     @Transactional
-    public ChatMessage sendMessage(UUID userId, UUID projectId, String content) {
-        Conversation conversation = conversationRepository.findByProjectId(projectId)
-                .orElseGet(() -> conversationRepository.save(new Conversation(userId, projectId)));
+    public ChatMessage sendMessage(UUID userId, UUID conversationId, String content) {
+        Conversation conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
+                        "Conversation not found: " + conversationId));
 
         ChatMessage message = new ChatMessage(conversation, MessageRole.USER, content, userId);
         return chatMessageRepository.save(message);

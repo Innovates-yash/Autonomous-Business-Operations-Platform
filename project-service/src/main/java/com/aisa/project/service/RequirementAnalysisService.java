@@ -4,6 +4,7 @@ import com.aisa.commons.domain.ProjectState;
 import com.aisa.project.ai.AiAnalysisClient;
 import com.aisa.project.ai.AiAnalysisException;
 import com.aisa.project.ai.AnalysisResult;
+import com.aisa.project.config.AnalysisConfig;
 import com.aisa.project.domain.Idea;
 import com.aisa.project.domain.Project;
 import com.aisa.project.domain.Requirement;
@@ -13,6 +14,10 @@ import com.aisa.project.repository.ProjectRepository;
 import com.aisa.project.security.ProjectPrincipal;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -43,18 +48,21 @@ public class RequirementAnalysisService {
     private final ProjectRepository projectRepository;
     private final ProjectStateMachineService stateMachineService;
     private final AiAnalysisClient aiAnalysisClient;
+    private final AnalysisConfig analysisConfig;
 
     public RequirementAnalysisService(ProjectRepository projectRepository,
                                       ProjectStateMachineService stateMachineService,
-                                      AiAnalysisClient aiAnalysisClient) {
+                                      AiAnalysisClient aiAnalysisClient,
+                                      AnalysisConfig analysisConfig) {
         this.projectRepository = projectRepository;
         this.stateMachineService = stateMachineService;
         this.aiAnalysisClient = aiAnalysisClient;
+        this.analysisConfig = analysisConfig;
     }
 
     /**
      * Initiates requirement analysis for a Project: transitions state to ANALYZING,
-     * calls AI, and persists generated requirements and use cases.
+     * calls AI with retry, and persists generated requirements and use cases.
      *
      * @param projectId the Project to analyze
      * @param principal the authenticated principal initiating analysis
@@ -74,19 +82,10 @@ public class RequirementAnalysisService {
             throw new AiAnalysisException("Project has no idea description to analyze");
         }
 
-        // Step 3: Call the AI provider to generate requirements and use cases (Requirement 4.1).
-        AnalysisResult result;
-        try {
-            result = aiAnalysisClient.analyze(idea.getDescription());
-        } catch (AiAnalysisException ex) {
-            // On AI failure: preserve prior state and existing requirements (Requirement 4.9).
-            // Rollback the state transition by re-transitioning is complex; instead we let
-            // the transaction roll back (the state change was within this TX).
-            throw ex;
-        } catch (Exception ex) {
-            log.error("Unexpected error during AI analysis for project {}", projectId, ex);
-            throw new AiAnalysisException("AI analysis failed unexpectedly", ex);
-        }
+        // Step 3: Call the AI provider with retry logic (Requirement 4.9).
+        // Retry up to maxRetries (default 3) total attempts. On exhaustion, halt analysis,
+        // preserve prior state and existing requirements, and return provider-failure error.
+        AnalysisResult result = invokeAiWithRetry(idea.getDescription(), projectId);
 
         // Step 4: Validate minimum constraints (≥1 FR + ≥1 NFR, Requirement 4.1).
         validateAnalysisResult(result);
@@ -114,6 +113,62 @@ public class RequirementAnalysisService {
         }
 
         return projectRepository.save(project);
+    }
+
+    /**
+     * Invokes the AI analysis client with retry logic (Requirement 4.9).
+     *
+     * <p>Retries up to {@link AnalysisConfig#getMaxRetries()} total attempts (default 3).
+     * Both provider errors ({@link AiAnalysisException}) and timeouts count as failed attempts.
+     * On exhaustion of all retries, throws a descriptive {@link AiAnalysisException} with
+     * a "provider-failure" indication so the caller can preserve prior state.
+     *
+     * @param ideaDescription the idea text to analyze
+     * @param projectId       the project identifier (for logging)
+     * @return the analysis result from the AI provider
+     * @throws AiAnalysisException if all retry attempts are exhausted
+     */
+    private AnalysisResult invokeAiWithRetry(String ideaDescription, UUID projectId) {
+        int maxAttempts = analysisConfig.getMaxRetries();
+        long timeoutSeconds = analysisConfig.getTimeoutSeconds();
+        AiAnalysisException lastException = null;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                AnalysisResult result = CompletableFuture
+                        .supplyAsync(() -> aiAnalysisClient.analyze(ideaDescription))
+                        .get(timeoutSeconds, TimeUnit.SECONDS);
+                log.info("AI analysis succeeded on attempt {}/{} for project {}",
+                        attempt, maxAttempts, projectId);
+                return result;
+            } catch (TimeoutException ex) {
+                lastException = new AiAnalysisException(
+                        "AI analysis timed out after " + timeoutSeconds + " seconds on attempt "
+                                + attempt + "/" + maxAttempts, ex);
+                log.warn("AI analysis timed out on attempt {}/{} for project {}",
+                        attempt, maxAttempts, projectId);
+            } catch (ExecutionException ex) {
+                Throwable cause = ex.getCause();
+                if (cause instanceof AiAnalysisException aiEx) {
+                    lastException = aiEx;
+                } else {
+                    lastException = new AiAnalysisException(
+                            "AI analysis failed on attempt " + attempt + "/" + maxAttempts, cause);
+                }
+                log.warn("AI analysis failed on attempt {}/{} for project {}: {}",
+                        attempt, maxAttempts, projectId, lastException.getMessage());
+            } catch (InterruptedException ex) {
+                Thread.currentThread().interrupt();
+                throw new AiAnalysisException("AI analysis was interrupted", ex);
+            }
+        }
+
+        // All retries exhausted: halt analysis, preserve prior state (Requirement 4.9).
+        log.error("AI provider failed after {} attempts for project {}. Halting analysis.",
+                maxAttempts, projectId);
+        throw new AiAnalysisException(
+                "provider-failure: AI provider failed after " + maxAttempts
+                        + " attempts. Analysis halted, prior state preserved.", lastException);
     }
 
     private void validateAnalysisResult(AnalysisResult result) {

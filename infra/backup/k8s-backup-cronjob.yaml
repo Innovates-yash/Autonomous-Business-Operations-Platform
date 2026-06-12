@@ -1,0 +1,200 @@
+# =============================================================================
+# Kubernetes CronJob: Automated Database Backup
+# =============================================================================
+# Schedules automated MySQL backups every 24 hours (Req 28.1).
+# Uses the backup.sh script with retry logic (Req 28.4) and metadata recording
+# (Req 28.3). Retention policy is enforced within the script (Req 28.2: ≥30 days).
+#
+# Deploy: kubectl apply -f k8s-backup-cronjob.yaml -n aisa
+# =============================================================================
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: aisa-mysql-backup
+  namespace: aisa
+  labels:
+    app.kubernetes.io/name: aisa-mysql-backup
+    app.kubernetes.io/component: backup
+    app.kubernetes.io/part-of: ai-software-architect-platform
+spec:
+  # Run every 24 hours at 02:00 UTC (Req 28.1: interval ≤24h)
+  schedule: "0 2 * * *"
+  # Keep last 3 successful and 1 failed job for debugging
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  # Do not allow concurrent backup runs
+  concurrencyPolicy: Forbid
+  # If a schedule is missed by >5 minutes, skip that occurrence
+  startingDeadlineSeconds: 300
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: aisa-mysql-backup
+        app.kubernetes.io/component: backup
+    spec:
+      # Req 28.5: restore SLA is ≤60 min; backup should complete well within this
+      activeDeadlineSeconds: 3600
+      backoffLimit: 0  # Retries are handled within the script (3x)
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: aisa-mysql-backup
+            app.kubernetes.io/component: backup
+        spec:
+          restartPolicy: Never
+          serviceAccountName: aisa-backup-sa
+          containers:
+            - name: mysql-backup
+              image: mysql:8.4
+              command: ["/bin/bash", "/scripts/backup.sh"]
+              env:
+                - name: MYSQL_HOST
+                  valueFrom:
+                    configMapKeyRef:
+                      name: aisa-backup-config
+                      key: mysql-host
+                - name: MYSQL_PORT
+                  valueFrom:
+                    configMapKeyRef:
+                      name: aisa-backup-config
+                      key: mysql-port
+                - name: MYSQL_USER
+                  valueFrom:
+                    secretKeyRef:
+                      name: aisa-mysql-credentials
+                      key: username
+                - name: MYSQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: aisa-mysql-credentials
+                      key: password
+                - name: MYSQL_DATABASE
+                  valueFrom:
+                    configMapKeyRef:
+                      name: aisa-backup-config
+                      key: mysql-database
+                - name: BACKUP_DIR
+                  value: "/backups"
+                - name: RETENTION_DAYS
+                  valueFrom:
+                    configMapKeyRef:
+                      name: aisa-backup-config
+                      key: retention-days
+                - name: ALERT_WEBHOOK_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: aisa-alert-config
+                      key: webhook-url
+                      optional: true
+                - name: S3_BUCKET
+                  valueFrom:
+                    configMapKeyRef:
+                      name: aisa-backup-config
+                      key: s3-bucket
+                      optional: true
+                - name: S3_ENDPOINT
+                  valueFrom:
+                    configMapKeyRef:
+                      name: aisa-backup-config
+                      key: s3-endpoint
+                      optional: true
+                - name: MAX_RETRIES
+                  value: "3"
+              volumeMounts:
+                - name: backup-scripts
+                  mountPath: /scripts
+                  readOnly: true
+                - name: backup-storage
+                  mountPath: /backups
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+          volumes:
+            - name: backup-scripts
+              configMap:
+                name: aisa-backup-scripts
+                defaultMode: 0755
+            - name: backup-storage
+              persistentVolumeClaim:
+                claimName: aisa-backup-pvc
+---
+# =============================================================================
+# ConfigMap: Backup Configuration
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aisa-backup-config
+  namespace: aisa
+  labels:
+    app.kubernetes.io/name: aisa-mysql-backup
+    app.kubernetes.io/component: backup
+data:
+  mysql-host: "aisa-mysql"
+  mysql-port: "3306"
+  mysql-database: "aisa"
+  # Retention policy: ≥30 days (Req 28.2)
+  retention-days: "30"
+  # S3 storage (optional; leave empty for local-only)
+  s3-bucket: ""
+  s3-endpoint: ""
+---
+# =============================================================================
+# ConfigMap: Backup Scripts (backup.sh and restore.sh)
+# =============================================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: aisa-backup-scripts
+  namespace: aisa
+  labels:
+    app.kubernetes.io/name: aisa-mysql-backup
+    app.kubernetes.io/component: backup
+data:
+  backup.sh: |
+    # This ConfigMap entry is populated from infra/backup/backup.sh at deploy time.
+    # Use: kubectl create configmap aisa-backup-scripts --from-file=backup.sh=infra/backup/backup.sh --from-file=restore.sh=infra/backup/restore.sh -n aisa
+    echo "Placeholder — replace with actual script content at deployment"
+  restore.sh: |
+    # This ConfigMap entry is populated from infra/backup/restore.sh at deploy time.
+    echo "Placeholder — replace with actual script content at deployment"
+---
+# =============================================================================
+# PersistentVolumeClaim: Backup Storage
+# =============================================================================
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: aisa-backup-pvc
+  namespace: aisa
+  labels:
+    app.kubernetes.io/name: aisa-mysql-backup
+    app.kubernetes.io/component: backup
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Size for ~30 days of daily backups
+      storage: 50Gi
+  storageClassName: gp3
+---
+# =============================================================================
+# ServiceAccount: Backup Operations
+# =============================================================================
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: aisa-backup-sa
+  namespace: aisa
+  labels:
+    app.kubernetes.io/name: aisa-mysql-backup
+    app.kubernetes.io/component: backup
+  annotations:
+    # If using AWS IRSA for S3 access, annotate with the IAM role ARN:
+    # eks.amazonaws.com/role-arn: arn:aws:iam::ACCOUNT_ID:role/aisa-backup-role
+    description: "Service account for automated backup and restore operations"

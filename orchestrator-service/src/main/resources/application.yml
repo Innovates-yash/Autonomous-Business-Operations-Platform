@@ -25,6 +25,16 @@ spring:
       max-file-size: 1MB
       max-request-size: 1MB
 
+# Redis distributed locks for saga step coordination (Requirements 26.2, 26.6).
+# Lock keys use prefix "aisa:lock:orchestrator:" to isolate from session/cache keys.
+# Lock TTL = 120s matches per-agent invocation timeout (Req 6.4). On instance crash,
+# Redis auto-expires the lock so another replica re-queues work within 30s (Req 26.6).
+aisa:
+  orchestrator:
+    lock:
+      key-prefix: aisa:lock:orchestrator
+      expire-after-ms: 120000
+
 management:
   endpoints:
     web:

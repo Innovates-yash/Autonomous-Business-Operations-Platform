@@ -2,6 +2,7 @@ package com.aisa.chat.web;
 
 import com.aisa.commons.correlation.CorrelationContext;
 import com.aisa.commons.error.ErrorCodes;
+import jakarta.persistence.EntityNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.time.Instant;
 import java.util.List;
@@ -59,6 +60,21 @@ public class ChatExceptionHandler {
                 correlationId(request),
                 Instant.now());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    /**
+     * Conversation not found (e.g. invalid conversationId in path).
+     */
+    @ExceptionHandler(EntityNotFoundException.class)
+    public ResponseEntity<ChatValidationError> handleNotFound(
+            EntityNotFoundException ex, HttpServletRequest request) {
+        ChatValidationError error = new ChatValidationError(
+                ErrorCodes.NOT_FOUND,
+                ex.getMessage(),
+                List.of(),
+                correlationId(request),
+                Instant.now());
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }
 
     private static String correlationId(HttpServletRequest request) {

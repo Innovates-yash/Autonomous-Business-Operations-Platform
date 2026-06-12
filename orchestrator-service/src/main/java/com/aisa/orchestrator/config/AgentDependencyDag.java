@@ -125,4 +125,39 @@ public class AgentDependencyDag {
     public boolean isReady(AgentType agentType, Set<AgentType> completedAgents) {
         return completedAgents.containsAll(getDependencies(agentType));
     }
+
+    /**
+     * Returns all agents that are ready to execute given the set of already-completed
+     * agents. An agent is ready if all of its prerequisites are in the completed set and
+     * the agent itself has not yet completed (Requirement 6.10).
+     *
+     * @param completedAgents the set of agents that have already produced valid output
+     * @return an unmodifiable set of agents whose dependencies are all satisfied and
+     *         that have not yet completed
+     */
+    public Set<AgentType> getReadyAgents(Set<AgentType> completedAgents) {
+        EnumSet<AgentType> ready = EnumSet.noneOf(AgentType.class);
+        for (AgentType agent : AgentType.values()) {
+            if (!completedAgents.contains(agent) && isReady(agent, completedAgents)) {
+                ready.add(agent);
+            }
+        }
+        return Collections.unmodifiableSet(ready);
+    }
+
+    /**
+     * Returns {@code true} if the given agent is a terminal node in the DAG,
+     * meaning no other agent depends on it.
+     *
+     * @param agentType the agent to check
+     * @return {@code true} if no other agent lists this agent as a prerequisite
+     */
+    public boolean isTerminal(AgentType agentType) {
+        for (Map.Entry<AgentType, Set<AgentType>> entry : dependencies.entrySet()) {
+            if (entry.getValue().contains(agentType)) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

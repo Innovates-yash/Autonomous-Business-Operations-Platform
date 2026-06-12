@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,6 +14,7 @@ import com.aisa.commons.domain.Role;
 import com.aisa.project.ai.AiAnalysisClient;
 import com.aisa.project.ai.AiAnalysisException;
 import com.aisa.project.ai.AnalysisResult;
+import com.aisa.project.config.AnalysisConfig;
 import com.aisa.project.domain.Idea;
 import com.aisa.project.domain.Project;
 import com.aisa.project.domain.Requirement;
@@ -32,7 +34,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
  * Unit tests for {@link RequirementAnalysisService}: validates that analysis produces
  * ≥1 FR + ≥1 NFR (Requirement 4.1), state transitions to ANALYZING (Requirement 4.6),
  * use cases are linked to requirements (Requirement 4.5), and AI failures are handled
- * (Requirement 4.9).
+ * with retry logic (Requirement 4.9).
  */
 @ExtendWith(MockitoExtension.class)
 class RequirementAnalysisServiceTest {
@@ -46,6 +48,8 @@ class RequirementAnalysisServiceTest {
     @Mock
     private AiAnalysisClient aiAnalysisClient;
 
+    private AnalysisConfig analysisConfig;
+
     private RequirementAnalysisService service;
 
     private final UUID ownerId = UUID.randomUUID();
@@ -53,7 +57,11 @@ class RequirementAnalysisServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new RequirementAnalysisService(projectRepository, stateMachineService, aiAnalysisClient);
+        analysisConfig = new AnalysisConfig();
+        analysisConfig.setTimeoutSeconds(60);
+        analysisConfig.setMaxRetries(3);
+        service = new RequirementAnalysisService(projectRepository, stateMachineService,
+                aiAnalysisClient, analysisConfig);
     }
 
     private ProjectPrincipal owner() {
@@ -179,7 +187,7 @@ class RequirementAnalysisServiceTest {
 
         assertThatThrownBy(() -> service.analyzeProject(projectId, owner()))
                 .isInstanceOf(AiAnalysisException.class)
-                .hasMessageContaining("Provider timeout");
+                .hasMessageContaining("provider-failure");
 
         // Project is not saved (transaction will roll back).
         verify(projectRepository, never()).save(any());
@@ -231,5 +239,132 @@ class RequirementAnalysisServiceTest {
         assertThatThrownBy(() -> service.analyzeProject(projectId, owner()))
                 .isInstanceOf(AiAnalysisException.class)
                 .hasMessageContaining("non-functional requirement");
+    }
+
+    @Test
+    void analyzeProjectTimesOutWhenAiExceedsConfiguredTimeout() {
+        // Requirement 4.1: analysis must complete within the configured timeout (60s default).
+        // Use a very short timeout to simulate expiration.
+        analysisConfig.setTimeoutSeconds(1);
+
+        Project project = projectWithIdea();
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.ANALYZING), any()))
+                .thenReturn(project);
+        when(aiAnalysisClient.analyze("Build a Food Delivery App")).thenAnswer(invocation -> {
+            // Simulate a slow AI provider that exceeds the timeout.
+            Thread.sleep(3000);
+            return validAnalysisResult();
+        });
+
+        assertThatThrownBy(() -> service.analyzeProject(projectId, owner()))
+                .isInstanceOf(AiAnalysisException.class)
+                .hasMessageContaining("provider-failure");
+
+        // Project is not saved (transaction will roll back).
+        verify(projectRepository, never()).save(any());
+    }
+
+    @Test
+    void analyzeProjectCompletesWithinConfiguredTimeout() {
+        // Verify that analysis succeeds when AI responds within timeout.
+        analysisConfig.setTimeoutSeconds(10);
+
+        Project project = projectWithIdea();
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.ANALYZING), any()))
+                .thenReturn(project);
+        when(aiAnalysisClient.analyze("Build a Food Delivery App"))
+                .thenReturn(validAnalysisResult());
+        when(projectRepository.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Project result = service.analyzeProject(projectId, owner());
+
+        assertThat(result.getRequirements()).isNotEmpty();
+        assertThat(result.getState()).isEqualTo(ProjectState.ANALYZING);
+    }
+
+    // =========================================================================
+    // Retry logic tests (Requirement 4.9)
+    // =========================================================================
+
+    @Test
+    void analyzeProjectSucceedsOnSecondAttemptAfterProviderFailure() {
+        // Requirement 4.9: Retry on AI provider failure; succeed on 2nd attempt.
+        Project project = projectWithIdea();
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.ANALYZING), any()))
+                .thenReturn(project);
+        when(aiAnalysisClient.analyze("Build a Food Delivery App"))
+                .thenThrow(new AiAnalysisException("Provider temporarily unavailable"))
+                .thenReturn(validAnalysisResult());
+        when(projectRepository.save(any(Project.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Project result = service.analyzeProject(projectId, owner());
+
+        // Verify AI client was called twice (1st failed, 2nd succeeded).
+        verify(aiAnalysisClient, times(2)).analyze("Build a Food Delivery App");
+
+        // Verify requirements were persisted from the successful attempt.
+        assertThat(result.getRequirements()).isNotEmpty();
+        long frCount = result.getRequirements().stream()
+                .filter(r -> r.getType() == RequirementType.FUNCTIONAL).count();
+        assertThat(frCount).isGreaterThanOrEqualTo(1);
+
+        // Verify project was saved (analysis completed successfully).
+        verify(projectRepository).save(any(Project.class));
+    }
+
+    @Test
+    void analyzeProjectExhaustsThreeRetriesAndPreservesState() {
+        // Requirement 4.9: After 3 total attempts, halt analysis, preserve prior state,
+        // and return a provider-failure error.
+        Project project = projectWithIdea();
+        // Add some pre-existing requirements to verify they're preserved (not wiped).
+        Requirement existingReq = new Requirement(project, "Existing requirement", RequirementType.FUNCTIONAL);
+        project.getRequirements().add(existingReq);
+
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.ANALYZING), any()))
+                .thenReturn(project);
+        when(aiAnalysisClient.analyze("Build a Food Delivery App"))
+                .thenThrow(new AiAnalysisException("Provider error attempt 1"))
+                .thenThrow(new AiAnalysisException("Provider error attempt 2"))
+                .thenThrow(new AiAnalysisException("Provider error attempt 3"));
+
+        assertThatThrownBy(() -> service.analyzeProject(projectId, owner()))
+                .isInstanceOf(AiAnalysisException.class)
+                .hasMessageContaining("provider-failure")
+                .hasMessageContaining("3 attempts");
+
+        // Verify AI client was called exactly 3 times.
+        verify(aiAnalysisClient, times(3)).analyze("Build a Food Delivery App");
+
+        // Verify project was NOT saved — transaction rolls back, preserving prior state.
+        verify(projectRepository, never()).save(any());
+
+        // The existing requirement is still on the project object (not cleared).
+        assertThat(project.getRequirements()).contains(existingReq);
+    }
+
+    @Test
+    void analyzeProjectTimeoutCountsAsFailedAttemptForRetry() {
+        // Requirement 4.9: Timeout counts as a failure attempt; retries until exhausted.
+        analysisConfig.setTimeoutSeconds(1);
+
+        Project project = projectWithIdea();
+        when(stateMachineService.transition(eq(projectId), eq(ProjectState.ANALYZING), any()))
+                .thenReturn(project);
+        // All 3 attempts time out.
+        when(aiAnalysisClient.analyze("Build a Food Delivery App")).thenAnswer(invocation -> {
+            Thread.sleep(3000);
+            return validAnalysisResult();
+        });
+
+        assertThatThrownBy(() -> service.analyzeProject(projectId, owner()))
+                .isInstanceOf(AiAnalysisException.class)
+                .hasMessageContaining("provider-failure");
+
+        // Verify AI client was invoked 3 times (each timed out).
+        verify(aiAnalysisClient, times(3)).analyze("Build a Food Delivery App");
+
+        // Verify project was NOT saved.
+        verify(projectRepository, never()).save(any());
     }
 }

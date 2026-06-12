@@ -36,21 +36,22 @@ class ChatControllerTest {
 
     private static final UUID USER_ID = UUID.randomUUID();
     private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final UUID CONVERSATION_ID = UUID.randomUUID();
 
     @Test
     void validMessageIsPersistedAndReturns201() throws Exception {
         Conversation conv = new Conversation(USER_ID, PROJECT_ID);
         ChatMessage saved = new ChatMessage(conv, MessageRole.USER, "Hello world", USER_ID);
 
-        when(chatService.sendMessage(eq(USER_ID), eq(PROJECT_ID), eq("Hello world")))
+        when(chatService.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), eq("Hello world")))
                 .thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"Hello world"}
-                                """.formatted(PROJECT_ID)))
+                                {"content":"Hello world"}
+                                """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER"))
                 .andExpect(jsonPath("$.content").value("Hello world"))
@@ -59,12 +60,12 @@ class ChatControllerTest {
 
     @Test
     void emptyContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":""}
-                                """.formatted(PROJECT_ID)))
+                                {"content":""}
+                                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists())
@@ -75,12 +76,12 @@ class ChatControllerTest {
     void overLimitContentIsRejectedWithFieldError() throws Exception {
         String overLimit = "x".repeat(10001);
 
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"%s"}
-                                """.formatted(PROJECT_ID, overLimit)))
+                                {"content":"%s"}
+                                """.formatted(overLimit)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists())
@@ -89,12 +90,10 @@ class ChatControllerTest {
 
     @Test
     void nullContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"projectId":"%s"}
-                                """.formatted(PROJECT_ID)))
+                        .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists());
@@ -102,11 +101,11 @@ class ChatControllerTest {
 
     @Test
     void missingUserIdHeaderReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"Hello"}
-                                """.formatted(PROJECT_ID)))
+                                {"content":"Hello"}
+                                """))
                 .andExpect(status().isBadRequest());
     }
 
@@ -118,12 +117,12 @@ class ChatControllerTest {
 
         when(chatService.sendMessage(any(), any(), any())).thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"%s"}
-                                """.formatted(PROJECT_ID, maxContent)))
+                                {"content":"%s"}
+                                """.formatted(maxContent)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER"));
     }

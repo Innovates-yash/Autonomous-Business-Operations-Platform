@@ -128,7 +128,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - **Validates: Requirements 20.8**
 
 - [ ] 8. Project Service — requirement analysis module
-  - [ ] 8.1 Implement analysis initiation and generation
+  - [x] 8.1 Implement analysis initiation and generation
     - AI call producing ≥1 FR + ≥1 NFR within 60s, transition to Analyzing, use cases with traceability
     - _Requirements: 4.1, 4.2, 4.5, 4.6_
   - [ ] 8.2 Implement clarifying questions, answer incorporation, and manual edits
@@ -142,7 +142,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - _Requirements: 4.1, 4.3, 4.9_
 
 - [ ] 9. Orchestrator Service — saga engine
-  - [ ] 9.1 Create orchestration entities and dependency DAG
+  - [x] 9.1 Create orchestration entities and dependency DAG
     - Define GenerationRun, AgentInvocation, AgentOutput; encode the ten-agent dependency DAG
     - _Requirements: 6.1, 6.2_
   - [ ] 9.2 Implement Kafka saga engine with concurrency
@@ -363,10 +363,10 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - _Requirements: 27.3, 27.7_
 
 - [ ] 28. Scalability — Kafka and Redis integration
-  - [ ] 28.1 Configure Kafka topics and work submission
+  - [x] 28.1 Configure Kafka topics and work submission
     - Topics: agent-tasks, agent-progress, project-state-changes, audit-events; acknowledge submission ≤2s; reject on Kafka-unavailable retaining data; re-queue failed-instance work ≤30s
     - _Requirements: 26.1, 26.5, 26.6_
-  - [ ] 28.2 Configure Redis shared state and load distribution
+  - [x] 28.2 Configure Redis shared state and load distribution
     - Redis sessions/cache/rate-limits; verify load distribution ≤20% above mean; verify new-project creation ≤5s under 100 concurrent generations
     - _Requirements: 26.2, 26.3, 26.4_
   - [ ]* 28.3 Write property test for work conservation
@@ -374,7 +374,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
     - **Validates: Requirements 26.1, 26.5, 26.6**
 
 - [ ] 29. Production readiness — backup, health, and HA
-  - [ ] 29.1 Configure automated backups and restore
+  - [x] 29.1 Configure automated backups and restore
     - Backups ≤24h interval, ≥30-day retention, recorded with id+timestamp; retry 3x with Admin alert; restore ≤60 min, abort+preserve on failure with alert
     - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5, 28.6_
   - [ ] 29.2 Configure health checks and HA routing

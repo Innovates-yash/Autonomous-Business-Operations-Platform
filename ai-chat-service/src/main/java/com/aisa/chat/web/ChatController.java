@@ -8,6 +8,7 @@ import jakarta.validation.Valid;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -31,18 +32,24 @@ public class ChatController {
     }
 
     /**
-     * Submits a chat message within a project conversation.
+     * Submits a chat message within an existing conversation.
      * The userId is extracted from the X-User-Id header (set by the API Gateway
      * after JWT validation). Content is validated to be between 1 and 10,000 chars.
+     *
+     * @param conversationId the conversation to post to (path variable)
+     * @param userId         authenticated user id from gateway header
+     * @param request        validated request body with content
+     * @return the persisted message with 201 Created status
      */
-    @PostMapping("/messages")
+    @PostMapping("/{conversationId}/messages")
     public ResponseEntity<ChatMessageResponse> sendMessage(
+            @PathVariable UUID conversationId,
             @RequestHeader("X-User-Id") String userId,
             @Valid @RequestBody SendMessageRequest request) {
 
         ChatMessage saved = chatService.sendMessage(
                 UUID.fromString(userId),
-                request.projectId(),
+                conversationId,
                 request.content());
 
         ChatMessageResponse response = new ChatMessageResponse(

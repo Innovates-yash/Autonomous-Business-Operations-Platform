@@ -24,6 +24,9 @@ spring:
     multipart:
       max-file-size: 1MB
       max-request-size: 1MB
+  # Redis caching configuration (Requirements 26.2, 26.3, 26.4).
+  cache:
+    type: redis
 
 management:
   endpoints:
@@ -45,16 +48,14 @@ management:
     tracing:
       endpoint: ${ZIPKIN_ENDPOINT:http://localhost:9411/api/v2/spans}
 
+# Requirement analysis timeout (Requirement 4.1): AI analysis must complete within
+# this window. Default 60 seconds.
+analysis:
+  timeout-seconds: ${ANALYSIS_TIMEOUT_SECONDS:60}
+
 logging:
   pattern:
     level: "%5p [${spring.application.name},%X{correlationId:-}]"
-
-# Redis caching configuration (Requirements 26.2, 26.3, 26.4).
-# Cache keys use prefix "aisa:cache:project:" to isolate from session/rate-limit
-# keys in the shared Redis instance. RedisCacheConfig defines per-cache TTLs.
-spring:
-  cache:
-    type: redis
 
 ---
 # ===================== dev =====================

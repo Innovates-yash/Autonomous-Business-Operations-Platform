@@ -22,7 +22,7 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
  * field failed, and per Requirements 3.6/3.7 an absent or inaccessible Project is
  * reported as not-found.
  */
-@RestControllerAdvice(assignableTypes = {ProjectController.class, AnalysisController.class})
+@RestControllerAdvice(assignableTypes = {ProjectController.class, AnalysisController.class, RequirementController.class})
 public class ProjectExceptionHandler {
 
     /** Field-level validation failures (Requirement 3.11). */

@@ -1,8 +1,7 @@
 package com.aisa.chat.web.dto;
 
-import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
-import java.util.UUID;
 
 /**
  * Request payload for sending a chat message (Requirements 5.1, 5.2).
@@ -10,10 +9,7 @@ import java.util.UUID;
  */
 public record SendMessageRequest(
 
-        @NotNull(message = "projectId is required")
-        UUID projectId,
-
-        @NotNull(message = "content is required")
+        @NotBlank(message = "content is required")
         @Size(min = 1, max = 10000, message = "content must be between 1 and 10000 characters")
         String content
 ) {
