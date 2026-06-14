@@ -55,4 +55,17 @@ public record ProjectPrincipal(UUID userId, Role role) {
     public boolean canViewAllProjects() {
         return role == Role.ADMIN || role == Role.ARCHITECT;
     }
+
+    /**
+     * @return true if this principal's role holds the REQUIREMENT_ANALYSIS_START
+     *         permission. Per Requirements 2.7–2.11 and 4.1, ADMIN, ARCHITECT,
+     *         PRODUCT_MANAGER, and CLIENT may initiate requirement analysis.
+     *         DEVELOPER and GUEST may not.
+     */
+    public boolean canStartAnalysis() {
+        return role == Role.ADMIN
+                || role == Role.ARCHITECT
+                || role == Role.PRODUCT_MANAGER
+                || role == Role.CLIENT;
+    }
 }

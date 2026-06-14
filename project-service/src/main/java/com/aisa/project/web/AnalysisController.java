@@ -50,6 +50,12 @@ public class AnalysisController {
             @RequestHeader(name = USER_ID_HEADER, required = false) String userId,
             @RequestHeader(name = USER_ROLE_HEADER, required = false) String role) {
         ProjectPrincipal principal = ProjectPrincipal.from(userId, role);
+
+        // Require REQUIREMENT_ANALYSIS_START permission (Requirements 4.1, 2.3).
+        if (!principal.canStartAnalysis()) {
+            return ResponseEntity.status(org.springframework.http.HttpStatus.FORBIDDEN).build();
+        }
+
         Project analyzed = analysisService.analyzeProject(projectId, principal);
         return ResponseEntity.ok(AnalysisResponse.from(analyzed));
     }

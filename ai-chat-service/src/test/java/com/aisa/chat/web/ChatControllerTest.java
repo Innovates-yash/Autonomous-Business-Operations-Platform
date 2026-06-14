@@ -46,12 +46,12 @@ class ChatControllerTest {
         when(chatService.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), eq("Hello world")))
                 .thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/messages")
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"Hello world"}
-                                """))
+                                {"conversationId":"%s","content":"Hello world"}
+                                """.formatted(CONVERSATION_ID)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER"))
                 .andExpect(jsonPath("$.content").value("Hello world"))
@@ -60,28 +60,28 @@ class ChatControllerTest {
 
     @Test
     void emptyContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/messages")
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":""}
-                                """))
+                                {"conversationId":"%s","content":""}
+                                """.formatted(CONVERSATION_ID)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists())
-                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')].rejectedValue").value(""));
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')].rejectedValue[0]").value(""));
     }
 
     @Test
     void overLimitContentIsRejectedWithFieldError() throws Exception {
         String overLimit = "x".repeat(10001);
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/messages")
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"%s"}
-                                """.formatted(overLimit)))
+                                {"conversationId":"%s","content":"%s"}
+                                """.formatted(CONVERSATION_ID, overLimit)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists())
@@ -90,10 +90,12 @@ class ChatControllerTest {
 
     @Test
     void nullContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/messages")
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+                        .content("""
+                                {"conversationId":"%s"}
+                                """.formatted(CONVERSATION_ID)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists());
@@ -101,11 +103,11 @@ class ChatControllerTest {
 
     @Test
     void missingUserIdHeaderReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/messages")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"Hello"}
-                                """))
+                                {"conversationId":"%s","content":"Hello"}
+                                """.formatted(CONVERSATION_ID)))
                 .andExpect(status().isBadRequest());
     }
 
@@ -117,13 +119,32 @@ class ChatControllerTest {
 
         when(chatService.sendMessage(any(), any(), any())).thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/messages")
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"content":"%s"}
-                                """.formatted(maxContent)))
+                                {"conversationId":"%s","content":"%s"}
+                                """.formatted(CONVERSATION_ID, maxContent)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER"));
+    }
+
+    @Test
+    void validMessageHasTimestampInResponse() throws Exception {
+        Conversation conv = new Conversation(USER_ID, PROJECT_ID);
+        ChatMessage saved = new ChatMessage(conv, MessageRole.USER, "Test timestamp", USER_ID);
+
+        when(chatService.sendMessage(eq(USER_ID), eq(CONVERSATION_ID), eq("Test timestamp")))
+                .thenReturn(saved);
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"conversationId":"%s","content":"Test timestamp"}
+                                """.formatted(CONVERSATION_ID)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.createdAt").exists())
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()));
     }
 }

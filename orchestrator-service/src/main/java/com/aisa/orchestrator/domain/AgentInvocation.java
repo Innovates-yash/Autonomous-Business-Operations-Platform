@@ -55,6 +55,10 @@ public class AgentInvocation {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    /** Error message recorded when the invocation fails or times out (Requirement 6.6). */
+    @Column(name = "error_message", length = 2000)
+    private String errorMessage;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -150,6 +154,14 @@ public class AgentInvocation {
 
     public Instant getUpdatedAt() {
         return updatedAt;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
+    public void setErrorMessage(String errorMessage) {
+        this.errorMessage = errorMessage;
     }
 
     public AgentOutput getOutput() {
