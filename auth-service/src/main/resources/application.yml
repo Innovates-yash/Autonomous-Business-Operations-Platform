@@ -76,11 +76,15 @@ aisa:
 # namespace "aisa:session:auth:" so any auth-service instance can serve any request.
 # The session store-type is set to redis; the namespace is configured via
 # @EnableRedisHttpSession in RedisSessionConfig.
+# Redis caching configuration (Requirements 26.2, 26.3, 2.4, 2.14).
+# Role/permission lookups are cached under "aisa:cache:auth:" namespace.
 spring:
   session:
     store-type: redis
     redis:
       namespace: aisa:session:auth
+  cache:
+    type: redis
 
 ---
 # ===================== dev =====================
@@ -106,6 +110,11 @@ spring:
     consumer:
       group-id: auth-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Dev-only default signing secret (>= 32 bytes for HS256). Override via AUTH_JWT_SECRET in
 # every shared environment; never rely on this value outside local development.
@@ -141,6 +150,11 @@ spring:
     consumer:
       group-id: auth-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 # Wrap any secret value with ENC(...) and Jasypt decrypts at startup.
@@ -196,6 +210,11 @@ spring:
     consumer:
       group-id: auth-service
       auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:

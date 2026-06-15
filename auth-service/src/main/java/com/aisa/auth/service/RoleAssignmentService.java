@@ -8,6 +8,7 @@ import com.aisa.auth.repository.RefreshTokenRepository;
 import com.aisa.auth.repository.RoleRepository;
 import com.aisa.auth.repository.UserRepository;
 import java.util.List;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,6 +22,9 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>On role change, all active refresh tokens for the target user are revoked
  *       so their next authentication picks up the new role within 5 seconds
  *       (Requirement 2.13, 2.14).</li>
+ *   <li>On role change, the Redis-cached authorization decisions for the target user
+ *       are evicted so subsequent requests see the new permissions immediately
+ *       (Requirement 2.14).</li>
  * </ul>
  */
 @Service
@@ -42,6 +46,10 @@ public class RoleAssignmentService {
     /**
      * Assigns a new role to the target user. Only Admins may invoke this operation.
      *
+     * <p>On successful role change, the {@code rolePermissions} cache is evicted for the
+     * target user (all entries matching the user id prefix) so the new role's permissions
+     * take effect immediately on the next authorization decision (Req 2.14).
+     *
      * @param callerRole the role of the user performing the assignment
      * @param targetUserId the id of the user whose role is being changed
      * @param newRoleName the new role to assign
@@ -51,6 +59,7 @@ public class RoleAssignmentService {
      * @throws RoleNotFoundException if the requested role does not exist
      */
     @Transactional
+    @CacheEvict(value = "rolePermissions", allEntries = true)
     public User assignRole(RoleName callerRole, Long targetUserId, RoleName newRoleName) {
         // Requirement 2.7: only Admin may assign roles.
         if (callerRole != RoleName.ADMIN) {

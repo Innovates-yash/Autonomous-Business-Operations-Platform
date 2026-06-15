@@ -24,6 +24,9 @@ spring:
     multipart:
       max-file-size: 1MB
       max-request-size: 1MB
+  # Redis caching configuration (Requirements 26.2, 26.3, 26.4).
+  cache:
+    type: redis
 
 # Redis distributed locks for saga step coordination (Requirements 26.2, 26.6).
 # Lock keys use prefix "aisa:lock:orchestrator:" to isolate from session/cache keys.
@@ -86,6 +89,11 @@ spring:
     consumer:
       group-id: orchestrator-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 logging:
   level:
@@ -114,6 +122,11 @@ spring:
     consumer:
       group-id: orchestrator-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:
@@ -167,6 +180,11 @@ spring:
     consumer:
       group-id: orchestrator-service
       auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:

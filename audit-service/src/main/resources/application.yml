@@ -90,6 +90,11 @@ spring:
     consumer:
       group-id: audit-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 logging:
   level:
@@ -114,6 +119,11 @@ spring:
     consumer:
       group-id: audit-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:
@@ -163,6 +173,11 @@ spring:
     consumer:
       group-id: audit-service
       auto-offset-reset: earliest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:

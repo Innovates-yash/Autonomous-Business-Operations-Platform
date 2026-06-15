@@ -53,6 +53,9 @@ logging:
 # - aisa:notify:subscriptions:<userId> — active WebSocket subscription registry
 # - aisa:notify:fanout:<projectId>    — last-event markers for resync on reconnect
 # All keys use the "aisa:notify:" prefix to isolate from session/cache/rate-limit data.
+# TTL: subscription entries expire 1h after last heartbeat; fanout markers expire 24h.
+# This enables stateless horizontal scaling — any instance can determine which
+# connected clients should receive a fan-out event by consulting the shared registry.
 
 ---
 # ===================== dev =====================
@@ -70,6 +73,11 @@ spring:
     consumer:
       group-id: notification-service
       auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 logging:
   level:
@@ -90,6 +98,11 @@ spring:
     consumer:
       group-id: notification-service
       auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:
@@ -135,6 +148,11 @@ spring:
     consumer:
       group-id: notification-service
       auto-offset-reset: latest
+      enable-auto-commit: false
+      properties:
+        session.timeout.ms: 30000
+    producer:
+      acks: all
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:

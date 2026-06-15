@@ -10,6 +10,8 @@ import com.aisa.provider.repository.ProviderSelectionRepository;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -64,6 +66,7 @@ public class ProviderSelectionService {
      * @throws ProviderNotConfiguredException if {@code provider} is not configured; the prior
      *                                        selection is retained and nothing is persisted
      */
+    @CacheEvict(value = "providerSelection", allEntries = true)
     public ProviderType selectProvider(ProviderType provider, String selectedBy) {
         if (provider == null) {
             throw new IllegalArgumentException("provider must not be null");
@@ -99,6 +102,7 @@ public class ProviderSelectionService {
     }
 
     /** @return the full selection history, most recent first (Req 20.2). */
+    @Cacheable(value = "providerSelection", key = "'history'")
     public List<ProviderSelection> selectionHistory() {
         return selectionRepository.findAllByOrderBySelectedAtDesc();
     }

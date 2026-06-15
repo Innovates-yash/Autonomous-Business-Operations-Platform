@@ -18,7 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
  * REST endpoint for submitting chat messages (Requirements 5.1, 5.2, 5.9).
  * Validates content length (1–10,000 chars), rejects empty/over-limit messages
  * with field-level errors preserving the user's input, associates the userId
- * from the X-User-Id header and a UTC timestamp.
+ * from the X-User-Id header and a UTC timestamp. Creates a Conversation
+ * automatically if none exists for the user+project pair.
  */
 @RestController
 @RequestMapping("/api/chat")
@@ -31,12 +32,13 @@ public class ChatController {
     }
 
     /**
-     * Submits a chat message within an existing conversation.
+     * Submits a chat message within a project. The conversation is created
+     * automatically if one does not yet exist for the user+project pair.
      * The userId is extracted from the X-User-Id header (set by the API Gateway
      * after JWT validation). Content is validated to be between 1 and 10,000 chars.
      *
      * @param userId  authenticated user id from gateway header
-     * @param request validated request body with conversationId and content
+     * @param request validated request body with projectId and content
      * @return the persisted message with 201 Created status
      */
     @PostMapping("/messages")
@@ -46,7 +48,7 @@ public class ChatController {
 
         ChatMessage saved = chatService.sendMessage(
                 UUID.fromString(userId),
-                request.conversationId(),
+                request.projectId(),
                 request.content());
 
         ChatMessageResponse response = new ChatMessageResponse(

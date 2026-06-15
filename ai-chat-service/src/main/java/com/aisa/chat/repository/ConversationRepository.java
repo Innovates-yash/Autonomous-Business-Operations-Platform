@@ -11,4 +11,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface ConversationRepository extends JpaRepository<Conversation, UUID> {
 
     Optional<Conversation> findByProjectId(UUID projectId);
+
+    Optional<Conversation> findByUserIdAndProjectId(UUID userId, UUID projectId);
 }

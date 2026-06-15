@@ -83,6 +83,15 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Kafka support for KafkaTopicAutoConfiguration and KafkaSubmissionService.
+             Optional so services without spring-kafka on their classpath are unaffected.
+             The @ConditionalOnClass guards ensure beans are only created when kafka is present. -->
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Jasypt: at-rest encryption for sensitive properties (Requirements 25.1, 25.3).
              Inherited transitively by every service that depends on commons, enabling
              ENC(...) wrapped values in application.yml. The encryptor password is sourced

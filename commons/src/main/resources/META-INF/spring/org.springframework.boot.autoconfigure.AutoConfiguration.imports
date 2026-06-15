@@ -1,3 +1,6 @@
 com.aisa.commons.observability.ObservabilityMetricsAutoConfiguration
 com.aisa.commons.observability.TracingResilienceAutoConfiguration
 com.aisa.commons.error.ValidationAutoConfiguration
+com.aisa.commons.kafka.KafkaTopicAutoConfiguration
+com.aisa.commons.kafka.KafkaSubmissionAutoConfiguration
+com.aisa.commons.backup.BackupAutoConfiguration
