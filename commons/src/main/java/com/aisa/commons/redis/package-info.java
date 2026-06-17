@@ -20,6 +20,8 @@
  *   <tr><td>{@code aisa:cache:project:}</td><td>project-service</td><td>Hot project reads</td><td>5 min</td></tr>
  *   <tr><td>{@code aisa:chat:context:}</td><td>ai-chat-service</td><td>20-message rolling context window</td><td>24 h</td></tr>
  *   <tr><td>{@code aisa:lock:orchestrator:}</td><td>orchestrator-service</td><td>Distributed locks for saga steps</td><td>120 s</td></tr>
+ *   <tr><td>{@code aisa:notify:subscriptions:}</td><td>notification-service</td><td>Active WebSocket subscription registry</td><td>1 h</td></tr>
+ *   <tr><td>{@code aisa:notify:fanout:}</td><td>notification-service</td><td>Last-event markers for reconnect resync</td><td>24 h</td></tr>
  * </table>
  *
  * <h2>Load Distribution Guarantee (Req 26.3)</h2>

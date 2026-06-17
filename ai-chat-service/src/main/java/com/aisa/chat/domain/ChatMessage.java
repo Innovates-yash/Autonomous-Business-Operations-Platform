@@ -37,7 +37,7 @@ public class ChatMessage {
     @Column(name = "role", nullable = false, length = 16)
     private MessageRole role;
 
-    @Column(name = "content", nullable = false, length = 10000)
+    @Column(name = "content", nullable = false, columnDefinition = "TEXT")
     private String content;
 
     @Column(name = "user_id", nullable = false, columnDefinition = "BINARY(16)")

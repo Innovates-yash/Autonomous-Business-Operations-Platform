@@ -6,8 +6,9 @@
 CREATE TABLE conversation (
     id         BINARY(16)  NOT NULL,
     user_id    BINARY(16)  NOT NULL,
-    project_id BINARY(16)  NOT NULL,
+    project_id BINARY(16)  NULL,
     created_at DATETIME(6) NOT NULL,
+    updated_at DATETIME(6) NOT NULL,
     PRIMARY KEY (id),
     CONSTRAINT uq_conversation_project UNIQUE (project_id)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4;
@@ -18,7 +19,7 @@ CREATE TABLE chat_message (
     id              BINARY(16)     NOT NULL,
     conversation_id BINARY(16)     NOT NULL,
     role            VARCHAR(16)    NOT NULL,
-    content         VARCHAR(10000) NOT NULL,
+    content         TEXT           NOT NULL,
     user_id         BINARY(16)     NOT NULL,
     created_at      DATETIME(6)    NOT NULL,
     PRIMARY KEY (id),

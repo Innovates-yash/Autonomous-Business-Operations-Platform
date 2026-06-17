@@ -56,7 +56,8 @@ class ChatControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
                 .andExpect(jsonPath("$.projectId").value(PROJECT_ID.toString()))
-                .andExpect(jsonPath("$.createdAt").exists());
+                .andExpect(jsonPath("$.createdAt").exists())
+                .andExpect(jsonPath("$.updatedAt").exists());
     }
 
     // --- POST /api/chat/{conversationId}/messages tests ---
@@ -69,7 +70,7 @@ class ChatControllerTest {
         when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("Hello world")))
                 .thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -86,7 +87,7 @@ class ChatControllerTest {
         when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("")))
                 .thenThrow(new InvalidMessageException("content must be between 1 and 10000 characters", ""));
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -105,7 +106,7 @@ class ChatControllerTest {
         when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq(overLimit)))
                 .thenThrow(new InvalidMessageException("content must be between 1 and 10000 characters", overLimit));
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -119,7 +120,7 @@ class ChatControllerTest {
 
     @Test
     void nullContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))
@@ -130,7 +131,7 @@ class ChatControllerTest {
 
     @Test
     void missingUserIdHeaderReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {"content":"Hello"}
@@ -146,7 +147,7 @@ class ChatControllerTest {
 
         when(chatService.sendMessage(any(), any(), any())).thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -164,7 +165,7 @@ class ChatControllerTest {
         when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("Test timestamp")))
                 .thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -181,7 +182,7 @@ class ChatControllerTest {
         when(chatService.sendMessage(eq(unknownConv), eq(USER_ID), eq("Hello")))
                 .thenThrow(new EntityNotFoundException("Conversation not found: " + unknownConv));
 
-        mockMvc.perform(post("/api/chat/{conversationId}/messages", unknownConv)
+        mockMvc.perform(post("/api/chat/conversations/{conversationId}/messages", unknownConv)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""

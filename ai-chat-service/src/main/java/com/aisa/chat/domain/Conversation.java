@@ -5,14 +5,15 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
 /**
- * A conversation scoped to a Project and owned by a User (Requirements 5.1, 5.3).
- * Each Project has one Conversation that holds its ordered ChatMessages.
+ * A conversation scoped to a Project (optional) and owned by a User (Requirements 5.1, 5.3).
+ * Each Project may have one Conversation that holds its ordered ChatMessages.
  */
 @Entity
 @Table(name = "conversation")
@@ -26,11 +27,14 @@ public class Conversation {
     @Column(name = "user_id", nullable = false, columnDefinition = "BINARY(16)")
     private UUID userId;
 
-    @Column(name = "project_id", nullable = false, columnDefinition = "BINARY(16)")
+    @Column(name = "project_id", columnDefinition = "BINARY(16)")
     private UUID projectId;
 
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
+
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
 
     protected Conversation() {
     }
@@ -39,6 +43,12 @@ public class Conversation {
         this.userId = userId;
         this.projectId = projectId;
         this.createdAt = Instant.now();
+        this.updatedAt = this.createdAt;
+    }
+
+    @PreUpdate
+    void onUpdate() {
+        this.updatedAt = Instant.now();
     }
 
     public UUID getId() {
@@ -55,6 +65,10 @@ public class Conversation {
 
     public Instant getCreatedAt() {
         return createdAt;
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
     @Override

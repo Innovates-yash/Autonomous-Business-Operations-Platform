@@ -45,4 +45,12 @@ public final class RedisNamespaces {
 
     /** Distributed lock namespace for saga step coordination. TTL: 120 s. */
     public static final String LOCK_ORCHESTRATOR = "aisa:lock:orchestrator";
+
+    // ---- notification-service: WebSocket subscription state ----
+
+    /** Active WebSocket subscription registry per user. TTL: 1 h after last heartbeat. */
+    public static final String NOTIFY_SUBSCRIPTIONS = "aisa:notify:subscriptions";
+
+    /** Last-delivered event offset per project for reconnect resync. TTL: 24 h. */
+    public static final String NOTIFY_FANOUT = "aisa:notify:fanout";
 }

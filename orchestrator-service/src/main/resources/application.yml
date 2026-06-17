@@ -37,6 +37,22 @@ aisa:
     lock:
       key-prefix: aisa:lock:orchestrator
       expire-after-ms: 120000
+  # Kafka topic configuration — defaults suitable for dev (1 partition, replication 1).
+  # Production profiles override these for parallelism and fault tolerance.
+  kafka:
+    topics:
+      agent-tasks:
+        partitions: 1
+        replication-factor: 1
+      agent-progress:
+        partitions: 1
+        replication-factor: 1
+      project-state-changes:
+        partitions: 1
+        replication-factor: 1
+      audit-events:
+        partitions: 1
+        replication-factor: 1
 
 management:
   endpoints:
@@ -110,6 +126,8 @@ spring:
         heartbeat.interval.ms: 3000
     producer:
       acks: all
+      properties:
+        enable.idempotence: true
 
 logging:
   level:
@@ -144,6 +162,25 @@ spring:
         heartbeat.interval.ms: 3000
     producer:
       acks: all
+      properties:
+        enable.idempotence: true
+
+# Staging topic configuration — moderate parallelism.
+aisa:
+  kafka:
+    topics:
+      agent-tasks:
+        partitions: ${KAFKA_AGENT_TASKS_PARTITIONS:3}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:2}
+      agent-progress:
+        partitions: ${KAFKA_AGENT_PROGRESS_PARTITIONS:2}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:2}
+      project-state-changes:
+        partitions: ${KAFKA_PROJECT_STATE_CHANGES_PARTITIONS:2}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:2}
+      audit-events:
+        partitions: ${KAFKA_AUDIT_EVENTS_PARTITIONS:2}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:2}
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:
@@ -203,6 +240,25 @@ spring:
         heartbeat.interval.ms: 3000
     producer:
       acks: all
+      properties:
+        enable.idempotence: true
+
+# Production topic configuration — high parallelism and replication for fault tolerance.
+aisa:
+  kafka:
+    topics:
+      agent-tasks:
+        partitions: ${KAFKA_AGENT_TASKS_PARTITIONS:6}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:3}
+      agent-progress:
+        partitions: ${KAFKA_AGENT_PROGRESS_PARTITIONS:3}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:3}
+      project-state-changes:
+        partitions: ${KAFKA_PROJECT_STATE_CHANGES_PARTITIONS:3}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:3}
+      audit-events:
+        partitions: ${KAFKA_AUDIT_EVENTS_PARTITIONS:3}
+        replication-factor: ${KAFKA_REPLICATION_FACTOR:3}
 
 # Jasypt at-rest encryption for sensitive properties (Requirement 25.1, 25.3).
 jasypt:

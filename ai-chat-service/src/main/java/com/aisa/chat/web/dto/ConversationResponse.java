@@ -10,6 +10,7 @@ public record ConversationResponse(
         UUID id,
         UUID userId,
         UUID projectId,
-        Instant createdAt
+        Instant createdAt,
+        Instant updatedAt
 ) {
 }

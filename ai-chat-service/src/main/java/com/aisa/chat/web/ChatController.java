@@ -60,7 +60,8 @@ public class ChatController {
                 saved.getId(),
                 saved.getUserId(),
                 saved.getProjectId(),
-                saved.getCreatedAt());
+                saved.getCreatedAt(),
+                saved.getUpdatedAt());
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
@@ -75,7 +76,7 @@ public class ChatController {
      * @param request        validated request body with content
      * @return the persisted message with 201 Created status
      */
-    @PostMapping("/{conversationId}/messages")
+    @PostMapping("/conversations/{conversationId}/messages")
     public ResponseEntity<ChatMessageResponse> sendMessage(
             @RequestHeader("X-User-Id") String userId,
             @PathVariable UUID conversationId,

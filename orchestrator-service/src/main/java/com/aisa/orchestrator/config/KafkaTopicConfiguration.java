@@ -2,6 +2,7 @@ package com.aisa.orchestrator.config;
 
 import com.aisa.commons.kafka.KafkaTopics;
 import org.apache.kafka.clients.admin.NewTopic;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
@@ -18,9 +19,11 @@ import org.springframework.kafka.config.TopicBuilder;
  *   <li><b>audit-events</b> — immutable audit records (Req 23)</li>
  * </ul>
  *
- * Partition counts balance parallelism with cluster size appropriate for production.
- * Replication factor defaults to 1 for local dev; production Kafka clusters should override
- * via broker-level min.insync.replicas and topic-level overrides.
+ * <p>Partition and replication factor are profile-driven:
+ * <ul>
+ *   <li><b>dev</b> — 1 partition, replication factor 1 (single-node broker)</li>
+ *   <li><b>prod</b> — configurable via {@code aisa.kafka.topics.*} properties</li>
+ * </ul>
  */
 @Configuration
 public class KafkaTopicConfiguration {
@@ -53,35 +56,59 @@ public class KafkaTopicConfiguration {
     @Deprecated(forRemoval = true)
     public static final String TOPIC_AUDIT_EVENTS = KafkaTopics.AUDIT_EVENTS;
 
+    @Value("${aisa.kafka.topics.agent-tasks.partitions:1}")
+    private int agentTasksPartitions;
+
+    @Value("${aisa.kafka.topics.agent-tasks.replication-factor:1}")
+    private int agentTasksReplicationFactor;
+
+    @Value("${aisa.kafka.topics.agent-progress.partitions:1}")
+    private int agentProgressPartitions;
+
+    @Value("${aisa.kafka.topics.agent-progress.replication-factor:1}")
+    private int agentProgressReplicationFactor;
+
+    @Value("${aisa.kafka.topics.project-state-changes.partitions:1}")
+    private int projectStateChangesPartitions;
+
+    @Value("${aisa.kafka.topics.project-state-changes.replication-factor:1}")
+    private int projectStateChangesReplicationFactor;
+
+    @Value("${aisa.kafka.topics.audit-events.partitions:1}")
+    private int auditEventsPartitions;
+
+    @Value("${aisa.kafka.topics.audit-events.replication-factor:1}")
+    private int auditEventsReplicationFactor;
+
     @Bean
     public NewTopic agentTasksTopic() {
         return TopicBuilder.name(KafkaTopics.AGENT_TASKS)
-                .partitions(6)
-                .replicas(1)
+                .partitions(agentTasksPartitions)
+                .replicas(agentTasksReplicationFactor)
                 .build();
     }
 
     @Bean
     public NewTopic agentProgressTopic() {
         return TopicBuilder.name(KafkaTopics.AGENT_PROGRESS)
-                .partitions(3)
-                .replicas(1)
+                .partitions(agentProgressPartitions)
+                .replicas(agentProgressReplicationFactor)
                 .build();
     }
 
     @Bean
     public NewTopic projectStateChangesTopic() {
         return TopicBuilder.name(KafkaTopics.PROJECT_STATE_CHANGES)
-                .partitions(3)
-                .replicas(1)
+                .partitions(projectStateChangesPartitions)
+                .replicas(projectStateChangesReplicationFactor)
                 .build();
     }
 
     @Bean
     public NewTopic auditEventsTopic() {
         return TopicBuilder.name(KafkaTopics.AUDIT_EVENTS)
-                .partitions(3)
-                .replicas(1)
+                .partitions(auditEventsPartitions)
+                .replicas(auditEventsReplicationFactor)
                 .build();
     }
 }
