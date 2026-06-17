@@ -10,6 +10,7 @@ import com.aisa.project.service.ProjectService;
 import com.aisa.project.service.ProjectStateMachineService;
 import com.aisa.project.service.RequirementEditService;
 import com.aisa.project.web.dto.AddRequirementRequest;
+import com.aisa.project.web.dto.AnswerQuestionRequest;
 import com.aisa.project.web.dto.AnswerQuestionsRequest;
 import com.aisa.project.web.dto.ClarifyingQuestionResponse;
 import com.aisa.project.web.dto.ModifyRequirementRequest;
@@ -98,6 +99,29 @@ public class RequirementController {
         Project project = projectService.getById(projectId, principal);
 
         Project updated = clarifyingQuestionService.answerQuestions(project, request.answers(), principal);
+
+        List<RequirementResponse> requirements = updated.getRequirements().stream()
+                .map(RequirementResponse::from)
+                .toList();
+        return ResponseEntity.ok(requirements);
+    }
+
+    /**
+     * Answers a single clarifying question and regenerates the affected requirement
+     * (Requirement 4.4). PUT /api/projects/{id}/questions/{qId}/answer
+     */
+    @PutMapping("/{projectId}/questions/{questionId}/answer")
+    public ResponseEntity<List<RequirementResponse>> answerSingleQuestion(
+            @PathVariable UUID projectId,
+            @PathVariable UUID questionId,
+            @Valid @RequestBody AnswerQuestionRequest request,
+            @RequestHeader(name = USER_ID_HEADER, required = false) String userId,
+            @RequestHeader(name = USER_ROLE_HEADER, required = false) String role) {
+        ProjectPrincipal principal = ProjectPrincipal.from(userId, role);
+        Project project = projectService.getById(projectId, principal);
+
+        Project updated = clarifyingQuestionService.answerQuestions(
+                project, java.util.Map.of(questionId, request.answer()), principal);
 
         List<RequirementResponse> requirements = updated.getRequirements().stream()
                 .map(RequirementResponse::from)

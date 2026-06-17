@@ -7,6 +7,8 @@ import com.aisa.project.ai.AiAnalysisException;
 import com.aisa.project.security.MissingPrincipalException;
 import com.aisa.project.service.InvalidStateTransitionException;
 import com.aisa.project.service.ProjectNotFoundException;
+import com.aisa.project.service.QuestionNotFoundException;
+import com.aisa.project.service.RequirementNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -50,6 +52,28 @@ public class ProjectExceptionHandler {
         ApiError error = ApiError.of(
                 ErrorCodes.NOT_FOUND,
                 "Project not found",
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /** Requirement not found within the Project scope (Requirement 4.8). */
+    @ExceptionHandler(RequirementNotFoundException.class)
+    public ResponseEntity<ApiError> handleRequirementNotFound(
+            RequirementNotFoundException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.NOT_FOUND,
+                ex.getMessage(),
+                correlationId(request));
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    /** Clarifying question not found within the Project scope (Requirement 4.4). */
+    @ExceptionHandler(QuestionNotFoundException.class)
+    public ResponseEntity<ApiError> handleQuestionNotFound(
+            QuestionNotFoundException ex, HttpServletRequest request) {
+        ApiError error = ApiError.of(
+                ErrorCodes.NOT_FOUND,
+                ex.getMessage(),
                 correlationId(request));
         return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
     }

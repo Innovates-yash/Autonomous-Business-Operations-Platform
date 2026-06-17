@@ -12,10 +12,11 @@ import org.springframework.stereotype.Component;
  * Kafka consumer that receives agent-progress and project-state-change events
  * and forwards them to the appropriate STOMP topics (Req 22.1, 22.2).
  *
- * <p>Events are fanned out to two STOMP destinations:
+ * <p>Events are fanned out to scoped STOMP destinations:
  * <ul>
- *   <li>{@code /topic/project/{projectId}} — all subscribers watching that project</li>
- *   <li>{@code /topic/user/{userId}} — the user who owns/initiated the action</li>
+ *   <li>{@code /topic/project/{projectId}/progress} — agent progress for project watchers</li>
+ *   <li>{@code /topic/project/{projectId}/state} — project state-change events</li>
+ *   <li>{@code /topic/user/{userId}/notifications} — personal notifications for the user</li>
  * </ul>
  *
  * <p>This ensures connected clients receive real-time updates within 2s of the
@@ -33,7 +34,8 @@ public class NotificationEventConsumer {
     }
 
     /**
-     * Consumes agent progress events and forwards to STOMP topics.
+     * Consumes agent progress events from the {@code agent-progress} Kafka topic
+     * and forwards them to project-scoped and user-scoped STOMP destinations.
      */
     @KafkaListener(
             topics = KafkaTopics.AGENT_PROGRESS,
@@ -52,16 +54,16 @@ public class NotificationEventConsumer {
             log.debug("Agent progress: project={} agent={} status={} attempt={}",
                     event.projectId(), event.agentId(), event.status(), event.attempt());
 
-            // Fan-out to project-scoped topic
+            // Fan-out to project-scoped progress topic
             if (event.projectId() != null) {
                 messagingTemplate.convertAndSend(
-                        "/topic/project/" + event.projectId(), event);
+                        "/topic/project/" + event.projectId() + "/progress", event);
             }
 
-            // Fan-out to user-scoped topic
+            // Fan-out to user-scoped notifications topic
             if (event.userId() != null) {
                 messagingTemplate.convertAndSend(
-                        "/topic/user/" + event.userId(), event);
+                        "/topic/user/" + event.userId() + "/notifications", event);
             }
         } finally {
             CorrelationContext.clear();
@@ -69,7 +71,8 @@ public class NotificationEventConsumer {
     }
 
     /**
-     * Consumes project state change events and forwards to STOMP topics.
+     * Consumes project state change events from the {@code project-state-changes}
+     * Kafka topic and forwards them to project-scoped and user-scoped STOMP destinations.
      */
     @KafkaListener(
             topics = KafkaTopics.PROJECT_STATE_CHANGES,
@@ -88,16 +91,16 @@ public class NotificationEventConsumer {
             log.debug("Project state change: project={} {} -> {}",
                     event.projectId(), event.previousState(), event.newState());
 
-            // Fan-out to project-scoped topic
+            // Fan-out to project-scoped state topic
             if (event.projectId() != null) {
                 messagingTemplate.convertAndSend(
-                        "/topic/project/" + event.projectId(), event);
+                        "/topic/project/" + event.projectId() + "/state", event);
             }
 
-            // Fan-out to user-scoped topic
+            // Fan-out to user-scoped notifications topic
             if (event.userId() != null) {
                 messagingTemplate.convertAndSend(
-                        "/topic/user/" + event.userId(), event);
+                        "/topic/user/" + event.userId() + "/notifications", event);
             }
         } finally {
             CorrelationContext.clear();

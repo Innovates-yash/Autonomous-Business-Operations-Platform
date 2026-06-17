@@ -35,6 +35,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- WebFlux: provides WebClient for calling ai-provider-gateway
+             (Requirement 4.1, 4.9 — HTTP client with timeout support). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webflux</artifactId>
+        </dependency>
         <!-- Redis: caching for project reads and shared state for stateless
              horizontal scaling (Req 26.2, 26.3). -->
         <dependency>

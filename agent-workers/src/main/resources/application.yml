@@ -30,6 +30,19 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  endpoint:
+    health:
+      # Enable Kubernetes liveness/readiness probe endpoints (Requirements 28.7, 28.8, 28.9).
+      # K8s probes target /actuator/health/liveness and /actuator/health/readiness with
+      # periodSeconds=30, timeoutSeconds=10, failureThreshold=3.
+      probes:
+        enabled: true
+      show-details: when-authorized
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
@@ -77,7 +90,10 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false
       properties:
-        session.timeout.ms: 30000
+        # Re-queue failed-instance work ≤30s (Req 26.6): 10s session timeout ensures
+        # broker detects crashed consumer quickly; 3s heartbeat keeps session alive.
+        session.timeout.ms: 10000
+        heartbeat.interval.ms: 3000
     producer:
       acks: all
 
@@ -106,7 +122,8 @@ spring:
       auto-offset-reset: earliest
       enable-auto-commit: false
       properties:
-        session.timeout.ms: 30000
+        session.timeout.ms: 10000
+        heartbeat.interval.ms: 3000
     producer:
       acks: all
 
@@ -157,10 +174,11 @@ spring:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     consumer:
       group-id: agent-workers
-      auto-offset-reset: latest
+      auto-offset-reset: earliest
       enable-auto-commit: false
       properties:
-        session.timeout.ms: 30000
+        session.timeout.ms: 10000
+        heartbeat.interval.ms: 3000
     producer:
       acks: all
 

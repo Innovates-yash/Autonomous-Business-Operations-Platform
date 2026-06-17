@@ -48,6 +48,9 @@ class RequirementAnalysisServiceTest {
     @Mock
     private AiAnalysisClient aiAnalysisClient;
 
+    @Mock
+    private ClarifyingQuestionService clarifyingQuestionService;
+
     private AnalysisConfig analysisConfig;
 
     private RequirementAnalysisService service;
@@ -61,7 +64,7 @@ class RequirementAnalysisServiceTest {
         analysisConfig.setTimeoutSeconds(60);
         analysisConfig.setMaxRetries(3);
         service = new RequirementAnalysisService(projectRepository, stateMachineService,
-                aiAnalysisClient, analysisConfig);
+                aiAnalysisClient, analysisConfig, clarifyingQuestionService);
     }
 
     private ProjectPrincipal owner() {

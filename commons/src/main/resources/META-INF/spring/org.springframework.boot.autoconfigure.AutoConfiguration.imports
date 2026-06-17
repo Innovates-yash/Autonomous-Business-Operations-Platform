@@ -4,3 +4,4 @@ com.aisa.commons.error.ValidationAutoConfiguration
 com.aisa.commons.kafka.KafkaTopicAutoConfiguration
 com.aisa.commons.kafka.KafkaSubmissionAutoConfiguration
 com.aisa.commons.backup.BackupAutoConfiguration
+com.aisa.commons.health.HealthIndicatorAutoConfiguration

@@ -135,9 +135,9 @@ public class ClarifyingQuestionService {
             ClarifyingQuestion question = questions.stream()
                     .filter(q -> q.getId().equals(questionId))
                     .findFirst()
-                    .orElse(null);
+                    .orElseThrow(() -> new QuestionNotFoundException(questionId));
 
-            if (question != null && answer != null && !answer.isBlank()) {
+            if (answer != null && !answer.isBlank()) {
                 question.setAnswer(answer);
                 // Track the requirement referenced by this question for regeneration.
                 if (question.getRequirement() != null) {

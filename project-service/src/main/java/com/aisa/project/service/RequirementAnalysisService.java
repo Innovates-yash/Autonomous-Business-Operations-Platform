@@ -5,6 +5,7 @@ import com.aisa.project.ai.AiAnalysisClient;
 import com.aisa.project.ai.AiAnalysisException;
 import com.aisa.project.ai.AnalysisResult;
 import com.aisa.project.config.AnalysisConfig;
+import com.aisa.project.domain.ClarifyingQuestion;
 import com.aisa.project.domain.Idea;
 import com.aisa.project.domain.Project;
 import com.aisa.project.domain.Requirement;
@@ -49,15 +50,18 @@ public class RequirementAnalysisService {
     private final ProjectStateMachineService stateMachineService;
     private final AiAnalysisClient aiAnalysisClient;
     private final AnalysisConfig analysisConfig;
+    private final ClarifyingQuestionService clarifyingQuestionService;
 
     public RequirementAnalysisService(ProjectRepository projectRepository,
                                       ProjectStateMachineService stateMachineService,
                                       AiAnalysisClient aiAnalysisClient,
-                                      AnalysisConfig analysisConfig) {
+                                      AnalysisConfig analysisConfig,
+                                      ClarifyingQuestionService clarifyingQuestionService) {
         this.projectRepository = projectRepository;
         this.stateMachineService = stateMachineService;
         this.aiAnalysisClient = aiAnalysisClient;
         this.analysisConfig = analysisConfig;
+        this.clarifyingQuestionService = clarifyingQuestionService;
     }
 
     /**
@@ -111,6 +115,12 @@ public class RequirementAnalysisService {
             }
             project.getUseCases().add(useCase);
         }
+
+        // Step 7: Generate 1–10 clarifying questions referencing specific requirements
+        // (Requirement 4.3). Questions are generated based on the newly produced
+        // requirements and the original idea.
+        List<ClarifyingQuestion> questions = clarifyingQuestionService.generateQuestions(project);
+        log.info("Generated {} clarifying questions for project {}", questions.size(), projectId);
 
         return projectRepository.save(project);
     }

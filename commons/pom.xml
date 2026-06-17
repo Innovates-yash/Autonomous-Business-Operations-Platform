@@ -92,6 +92,24 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Boot Actuator: provides HealthIndicator interface for custom health checks
+             (Requirements 28.7, 28.8, 28.9). Optional — services already include actuator
+             themselves; this gives commons compile-time access to the HealthIndicator API. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- Spring Data Redis: provides RedisConnectionFactory for the Redis health indicator
+             (Requirement 28.7). Optional — only services with spring-data-redis on their
+             classpath will activate the RedisHealthIndicator. -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Jasypt: at-rest encryption for sensitive properties (Requirements 25.1, 25.3).
              Inherited transitively by every service that depends on commons, enabling
              ENC(...) wrapped values in application.yml. The encryptor password is sourced

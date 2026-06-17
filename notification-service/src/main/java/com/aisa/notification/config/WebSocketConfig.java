@@ -10,10 +10,14 @@ import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerCo
 /**
  * STOMP over WebSocket configuration for real-time event fan-out (Req 22, 29).
  *
+ * <p>Provides a SockJS-enabled STOMP endpoint at {@code /ws/notifications} and
+ * configures in-memory message broker for topic-based subscriptions.
+ *
  * <p>Topic destinations are scoped per project and per user:
  * <ul>
- *   <li>{@code /topic/project/{projectId}} — agent progress and state-change events for a project</li>
- *   <li>{@code /topic/user/{userId}} — personal notifications for a user</li>
+ *   <li>{@code /topic/project/{projectId}/progress} — agent progress events for a project</li>
+ *   <li>{@code /topic/project/{projectId}/state} — project state-change events</li>
+ *   <li>{@code /topic/user/{userId}/notifications} — personal notifications for a user</li>
  * </ul>
  *
  * <p>The {@link SubscriptionAuthInterceptor} enforces that a subscribing user
@@ -39,9 +43,10 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
-        // WebSocket endpoint for STOMP connections (Req 22, 29).
+        // WebSocket endpoint with SockJS fallback for STOMP connections (Req 22, 29).
         registry.addEndpoint("/ws/notifications")
-                .setAllowedOriginPatterns("*");
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
     }
 
     @Override

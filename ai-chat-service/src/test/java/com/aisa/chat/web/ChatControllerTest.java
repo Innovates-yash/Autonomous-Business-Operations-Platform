@@ -11,6 +11,8 @@ import com.aisa.chat.domain.ChatMessage;
 import com.aisa.chat.domain.Conversation;
 import com.aisa.chat.domain.MessageRole;
 import com.aisa.chat.service.ChatService;
+import com.aisa.chat.service.InvalidMessageException;
+import jakarta.persistence.EntityNotFoundException;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,21 +38,43 @@ class ChatControllerTest {
 
     private static final UUID USER_ID = UUID.randomUUID();
     private static final UUID PROJECT_ID = UUID.randomUUID();
+    private static final UUID CONVERSATION_ID = UUID.randomUUID();
+
+    // --- POST /api/chat/conversations tests ---
+
+    @Test
+    void createConversation_returnsCreated() throws Exception {
+        Conversation conv = new Conversation(USER_ID, PROJECT_ID);
+        when(chatService.createConversation(eq(USER_ID), eq(PROJECT_ID))).thenReturn(conv);
+
+        mockMvc.perform(post("/api/chat/conversations")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"projectId":"%s"}
+                                """.formatted(PROJECT_ID)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.projectId").value(PROJECT_ID.toString()))
+                .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    // --- POST /api/chat/{conversationId}/messages tests ---
 
     @Test
     void validMessageIsPersistedAndReturns201() throws Exception {
         Conversation conv = new Conversation(USER_ID, PROJECT_ID);
         ChatMessage saved = new ChatMessage(conv, MessageRole.USER, "Hello world", USER_ID);
 
-        when(chatService.sendMessage(eq(USER_ID), eq(PROJECT_ID), eq("Hello world")))
+        when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("Hello world")))
                 .thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"Hello world"}
-                                """.formatted(PROJECT_ID)))
+                                {"content":"Hello world"}
+                                """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER"))
                 .andExpect(jsonPath("$.content").value("Hello world"))
@@ -59,42 +83,46 @@ class ChatControllerTest {
 
     @Test
     void emptyContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/messages")
+        when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("")))
+                .thenThrow(new InvalidMessageException("content must be between 1 and 10000 characters", ""));
+
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":""}
-                                """.formatted(PROJECT_ID)))
+                                {"content":""}
+                                """))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists())
-                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')].rejectedValue[0]").value(""));
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("content"))
+                .andExpect(jsonPath("$.fieldErrors[0].rejectedValue").value(""));
     }
 
     @Test
-    void overLimitContentIsRejectedWithFieldError() throws Exception {
+    void overLimitContentIsRejectedWithInputPreserved() throws Exception {
         String overLimit = "x".repeat(10001);
 
-        mockMvc.perform(post("/api/chat/messages")
+        when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq(overLimit)))
+                .thenThrow(new InvalidMessageException("content must be between 1 and 10000 characters", overLimit));
+
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"%s"}
-                                """.formatted(PROJECT_ID, overLimit)))
+                                {"content":"%s"}
+                                """.formatted(overLimit)))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
-                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists())
-                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')].rejectedValue").exists());
+                .andExpect(jsonPath("$.fieldErrors[0].field").value("content"))
+                .andExpect(jsonPath("$.fieldErrors[0].rejectedValue").value(overLimit));
     }
 
     @Test
     void nullContentIsRejectedWithFieldError() throws Exception {
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {"projectId":"%s"}
-                                """.formatted(PROJECT_ID)))
+                        .content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
                 .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists());
@@ -102,11 +130,11 @@ class ChatControllerTest {
 
     @Test
     void missingUserIdHeaderReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"Hello"}
-                                """.formatted(PROJECT_ID)))
+                                {"content":"Hello"}
+                                """))
                 .andExpect(status().isBadRequest());
     }
 
@@ -118,12 +146,12 @@ class ChatControllerTest {
 
         when(chatService.sendMessage(any(), any(), any())).thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"%s"}
-                                """.formatted(PROJECT_ID, maxContent)))
+                                {"content":"%s"}
+                                """.formatted(maxContent)))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.role").value("USER"));
     }
@@ -133,17 +161,33 @@ class ChatControllerTest {
         Conversation conv = new Conversation(USER_ID, PROJECT_ID);
         ChatMessage saved = new ChatMessage(conv, MessageRole.USER, "Test timestamp", USER_ID);
 
-        when(chatService.sendMessage(eq(USER_ID), eq(PROJECT_ID), eq("Test timestamp")))
+        when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("Test timestamp")))
                 .thenReturn(saved);
 
-        mockMvc.perform(post("/api/chat/messages")
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", CONVERSATION_ID)
                         .header("X-User-Id", USER_ID.toString())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"projectId":"%s","content":"Test timestamp"}
-                                """.formatted(PROJECT_ID)))
+                                {"content":"Test timestamp"}
+                                """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.createdAt").exists())
                 .andExpect(jsonPath("$.userId").value(USER_ID.toString()));
+    }
+
+    @Test
+    void conversationNotFoundReturns404() throws Exception {
+        UUID unknownConv = UUID.randomUUID();
+        when(chatService.sendMessage(eq(unknownConv), eq(USER_ID), eq("Hello")))
+                .thenThrow(new EntityNotFoundException("Conversation not found: " + unknownConv));
+
+        mockMvc.perform(post("/api/chat/{conversationId}/messages", unknownConv)
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"Hello"}
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
 }

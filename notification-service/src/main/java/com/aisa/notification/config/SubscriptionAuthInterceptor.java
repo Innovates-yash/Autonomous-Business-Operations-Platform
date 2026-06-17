@@ -2,6 +2,8 @@ package com.aisa.notification.config;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,10 +23,12 @@ import org.springframework.stereotype.Component;
  *
  * <p>On SUBSCRIBE, verifies the subscribing user has access to the target topic:
  * <ul>
- *   <li>{@code /topic/project/{projectId}} — allowed if user is a member/owner of the project.
+ *   <li>{@code /topic/project/{projectId}/progress} and {@code /topic/project/{projectId}/state}
+ *       — allowed if user is authenticated and has access to the project.
  *       For now, we verify the user is authenticated (has X-User-Id). Full project-membership
  *       check can be integrated via a project-service call in production.</li>
- *   <li>{@code /topic/user/{userId}} — allowed only if the subscribing user's ID matches {userId}.</li>
+ *   <li>{@code /topic/user/{userId}/notifications} — allowed only if the subscribing user's
+ *       ID matches {userId}.</li>
  * </ul>
  *
  * <p>If authorization fails, the message is rejected (returns null) preventing the subscription.
@@ -36,6 +40,14 @@ public class SubscriptionAuthInterceptor implements ChannelInterceptor {
 
     static final String USER_ID_HEADER = "X-User-Id";
     static final String SESSION_USER_ID_ATTR = "userId";
+
+    /** Matches /topic/user/{userId}/notifications */
+    private static final Pattern USER_TOPIC_PATTERN =
+            Pattern.compile("^/topic/user/([^/]+)/notifications$");
+
+    /** Matches /topic/project/{projectId}/progress or /topic/project/{projectId}/state */
+    private static final Pattern PROJECT_TOPIC_PATTERN =
+            Pattern.compile("^/topic/project/([^/]+)/(progress|state)$");
 
     @Override
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
@@ -95,22 +107,27 @@ public class SubscriptionAuthInterceptor implements ChannelInterceptor {
             return false;
         }
 
-        // /topic/user/{userId} — only the user themselves can subscribe
-        if (destination.startsWith("/topic/user/")) {
-            String targetUserId = destination.substring("/topic/user/".length());
+        // /topic/user/{userId}/notifications — only the user themselves can subscribe
+        Matcher userMatcher = USER_TOPIC_PATTERN.matcher(destination);
+        if (userMatcher.matches()) {
+            String targetUserId = userMatcher.group(1);
             if (!userId.equals(targetUserId)) {
-                log.warn("Subscription denied: user={} tried to subscribe to /topic/user/{}", userId, targetUserId);
+                log.warn("Subscription denied: user={} tried to subscribe to {}", userId, destination);
                 return false;
             }
             return true;
         }
 
-        // /topic/project/{projectId} — user must be authenticated (project access check)
-        if (destination.startsWith("/topic/project/")) {
+        // /topic/project/{projectId}/progress or /topic/project/{projectId}/state
+        // User must be authenticated and have access to the project.
+        Matcher projectMatcher = PROJECT_TOPIC_PATTERN.matcher(destination);
+        if (projectMatcher.matches()) {
             // The user is authenticated (has X-User-Id). In a full implementation,
             // we would verify project membership via project-service. For now,
             // being authenticated suffices for the project-scoped subscription.
-            log.debug("Subscription allowed: user={} to destination={}", userId, destination);
+            String projectId = projectMatcher.group(1);
+            log.debug("Subscription allowed: user={} to project={} sub={}",
+                    userId, projectId, projectMatcher.group(2));
             return true;
         }
 

@@ -1,5 +1,6 @@
 package com.aisa.chat.web;
 
+import com.aisa.chat.service.InvalidMessageException;
 import com.aisa.commons.correlation.CorrelationContext;
 import com.aisa.commons.error.ErrorCodes;
 import jakarta.persistence.EntityNotFoundException;
@@ -23,6 +24,25 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 @RestControllerAdvice(assignableTypes = ChatController.class)
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class ChatExceptionHandler {
+
+    /**
+     * Service-level content validation failures (Requirement 5.2). The rejected
+     * content is preserved in the error response so the client can redisplay it.
+     */
+    @ExceptionHandler(InvalidMessageException.class)
+    public ResponseEntity<ChatValidationError> handleInvalidMessage(
+            InvalidMessageException ex, HttpServletRequest request) {
+        ChatValidationError.FieldError fieldError = new ChatValidationError.FieldError(
+                "content", ex.getMessage(), ex.getRejectedContent());
+
+        ChatValidationError error = new ChatValidationError(
+                ErrorCodes.VALIDATION_ERROR,
+                "Message validation failed",
+                List.of(fieldError),
+                correlationId(request),
+                Instant.now());
+        return ResponseEntity.badRequest().body(error);
+    }
 
     /**
      * Field-level validation failures (Requirement 5.2). Returns the rejected value
