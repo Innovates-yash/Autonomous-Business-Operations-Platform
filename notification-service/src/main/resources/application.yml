@@ -70,6 +70,14 @@ logging:
 # This enables stateless horizontal scaling — any instance can determine which
 # connected clients should receive a fan-out event by consulting the shared registry.
 
+# Shared Redis cache auto-config (commons). Disabled for notification-service because it
+# uses RedisTemplate directly for subscription state rather than Spring Cache abstraction.
+aisa:
+  redis:
+    cache:
+      enabled: false
+      service-name: notification-service
+
 ---
 # ===================== dev =====================
 # Points at docker-compose.infra.yml backing services on localhost.

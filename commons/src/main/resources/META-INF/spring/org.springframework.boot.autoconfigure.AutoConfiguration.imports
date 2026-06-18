@@ -5,3 +5,4 @@ com.aisa.commons.kafka.KafkaTopicAutoConfiguration
 com.aisa.commons.kafka.KafkaSubmissionAutoConfiguration
 com.aisa.commons.backup.BackupAutoConfiguration
 com.aisa.commons.health.HealthIndicatorAutoConfiguration
+com.aisa.commons.redis.RedisCacheAutoConfiguration

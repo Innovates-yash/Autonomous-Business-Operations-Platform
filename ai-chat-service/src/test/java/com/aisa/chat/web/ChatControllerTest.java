@@ -191,4 +191,68 @@ class ChatControllerTest {
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("NOT_FOUND"));
     }
+
+    // --- POST /api/chat/messages tests (body-based conversationId) ---
+
+    @Test
+    void messagesEndpoint_validMessageIsPersistedAndReturns201() throws Exception {
+        Conversation conv = new Conversation(USER_ID, PROJECT_ID);
+        ChatMessage saved = new ChatMessage(conv, MessageRole.USER, "Hello flat", USER_ID);
+
+        when(chatService.sendMessage(eq(CONVERSATION_ID), eq(USER_ID), eq("Hello flat")))
+                .thenReturn(saved);
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"conversationId":"%s","content":"Hello flat"}
+                                """.formatted(CONVERSATION_ID)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.role").value("USER"))
+                .andExpect(jsonPath("$.content").value("Hello flat"))
+                .andExpect(jsonPath("$.userId").value(USER_ID.toString()))
+                .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @Test
+    void messagesEndpoint_emptyContentIsRejected() throws Exception {
+        mockMvc.perform(post("/api/chat/messages")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"conversationId":"%s","content":""}
+                                """.formatted(CONVERSATION_ID)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists());
+    }
+
+    @Test
+    void messagesEndpoint_overLimitContentIsRejected() throws Exception {
+        String overLimit = "x".repeat(10001);
+
+        mockMvc.perform(post("/api/chat/messages")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"conversationId":"%s","content":"%s"}
+                                """.formatted(CONVERSATION_ID, overLimit)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='content')]").exists());
+    }
+
+    @Test
+    void messagesEndpoint_missingConversationIdIsRejected() throws Exception {
+        mockMvc.perform(post("/api/chat/messages")
+                        .header("X-User-Id", USER_ID.toString())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"content":"Hello"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.fieldErrors[?(@.field=='conversationId')]").exists());
+    }
 }

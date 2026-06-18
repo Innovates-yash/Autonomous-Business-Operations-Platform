@@ -6,6 +6,7 @@ import com.aisa.chat.service.ChatService;
 import com.aisa.chat.web.dto.ChatMessageResponse;
 import com.aisa.chat.web.dto.ConversationResponse;
 import com.aisa.chat.web.dto.CreateConversationRequest;
+import com.aisa.chat.web.dto.SendMessageBodyRequest;
 import com.aisa.chat.web.dto.SendMessageRequest;
 import jakarta.validation.Valid;
 import java.util.UUID;
@@ -23,7 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
  *
  * <ul>
  *   <li>POST /api/chat/conversations — create a new conversation</li>
- *   <li>POST /api/chat/{conversationId}/messages — send a message to an existing conversation</li>
+ *   <li>POST /api/chat/messages — send a message (conversationId + content in body)</li>
+ *   <li>POST /api/chat/conversations/{conversationId}/messages — send a message (conversationId in path)</li>
  * </ul>
  *
  * Validates content length (1–10,000 chars), rejects empty/over-limit messages
@@ -84,6 +86,36 @@ public class ChatController {
 
         ChatMessage saved = chatService.sendMessage(
                 conversationId,
+                UUID.fromString(userId),
+                request.content());
+
+        ChatMessageResponse response = new ChatMessageResponse(
+                saved.getId(),
+                saved.getConversation().getId(),
+                saved.getRole().name(),
+                saved.getContent(),
+                saved.getUserId(),
+                saved.getCreatedAt());
+
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * Submits a chat message accepting conversationId and content in the request body.
+     * This is an alternative to the path-based endpoint that accepts both fields in
+     * a single payload body (Requirements 5.1, 5.2, 5.9).
+     *
+     * @param userId  authenticated user id from gateway header
+     * @param request validated request body with conversationId and content
+     * @return the persisted message with 201 Created status
+     */
+    @PostMapping("/messages")
+    public ResponseEntity<ChatMessageResponse> sendMessageFlat(
+            @RequestHeader("X-User-Id") String userId,
+            @Valid @RequestBody SendMessageBodyRequest request) {
+
+        ChatMessage saved = chatService.sendMessage(
+                request.conversationId(),
                 UUID.fromString(userId),
                 request.content());
 

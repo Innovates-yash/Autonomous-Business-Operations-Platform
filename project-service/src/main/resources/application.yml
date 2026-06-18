@@ -28,6 +28,15 @@ spring:
   cache:
     type: redis
 
+# Shared Redis cache properties (commons auto-config). project-service provides its own
+# RedisCacheManager bean with custom per-cache TTLs, so the auto-config's default manager
+# is suppressed via @ConditionalOnMissingBean. The service-name is set for documentation.
+aisa:
+  redis:
+    cache:
+      service-name: project-service
+      default-ttl: PT5M
+
 management:
   endpoints:
     web:

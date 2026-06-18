@@ -110,6 +110,15 @@
             <optional>true</optional>
         </dependency>
 
+        <!-- Spring Boot Cache: provides RedisCacheManager and @EnableCaching for the shared
+             RedisCacheAutoConfiguration (Requirements 26.2, 26.3). Optional — only services
+             with spring-boot-starter-data-redis on their classpath activate this. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+            <optional>true</optional>
+        </dependency>
+
         <!-- Jasypt: at-rest encryption for sensitive properties (Requirements 25.1, 25.3).
              Inherited transitively by every service that depends on commons, enabling
              ENC(...) wrapped values in application.yml. The encryptor password is sourced

@@ -70,6 +70,12 @@ logging:
 aisa:
   chat:
     context-window-size: 20
+  # Shared Redis cache auto-config (commons). Disabled for ai-chat-service because it
+  # uses a custom RedisTemplate for the context-window list rather than Spring Cache.
+  redis:
+    cache:
+      enabled: false
+      service-name: ai-chat-service
 
 ---
 # ===================== dev =====================
