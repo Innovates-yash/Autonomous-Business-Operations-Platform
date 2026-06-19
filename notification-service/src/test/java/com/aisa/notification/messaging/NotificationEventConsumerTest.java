@@ -34,7 +34,7 @@ class NotificationEventConsumerTest {
     }
 
     @Test
-    @DisplayName("Agent progress event is forwarded to project and user STOMP topics")
+    @DisplayName("Agent progress event is forwarded to project progress and user notification STOMP topics")
     void agentProgress_forwardsToProjectAndUserTopics() {
         AgentProgressEvent event = new AgentProgressEvent(
                 "proj-123", "user-456", "requirement-analyst",
@@ -43,8 +43,10 @@ class NotificationEventConsumerTest {
 
         consumer.onAgentProgress(event);
 
-        verify(messagingTemplate).convertAndSend(eq("/topic/project/proj-123"), eq(event));
-        verify(messagingTemplate).convertAndSend(eq("/topic/user/user-456"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/project/proj-123/progress"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/user/user-456/notifications"), eq(event));
     }
 
     @Test
@@ -57,9 +59,10 @@ class NotificationEventConsumerTest {
 
         consumer.onAgentProgress(event);
 
-        verify(messagingTemplate).convertAndSend(eq("/topic/user/user-456"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/user/user-456/notifications"), eq(event));
         verify(messagingTemplate, never()).convertAndSend(
-                eq("/topic/project/" + (String) null), eq(event));
+                eq("/topic/project/null/progress"), eq(event));
     }
 
     @Test
@@ -72,7 +75,10 @@ class NotificationEventConsumerTest {
 
         consumer.onAgentProgress(event);
 
-        verify(messagingTemplate).convertAndSend(eq("/topic/project/proj-123"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/project/proj-123/progress"), eq(event));
+        verify(messagingTemplate, never()).convertAndSend(
+                eq("/topic/user/null/notifications"), eq(event));
     }
 
     @Test
@@ -83,7 +89,7 @@ class NotificationEventConsumerTest {
     }
 
     @Test
-    @DisplayName("Project state change event is forwarded to project and user STOMP topics")
+    @DisplayName("Project state change event is forwarded to project state and user notification STOMP topics")
     void projectStateChange_forwardsToProjectAndUserTopics() {
         ProjectStateChangeEvent event = new ProjectStateChangeEvent(
                 "proj-123", "user-456", "DRAFT", "ANALYZING",
@@ -91,8 +97,10 @@ class NotificationEventConsumerTest {
 
         consumer.onProjectStateChange(event);
 
-        verify(messagingTemplate).convertAndSend(eq("/topic/project/proj-123"), eq(event));
-        verify(messagingTemplate).convertAndSend(eq("/topic/user/user-456"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/project/proj-123/state"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/user/user-456/notifications"), eq(event));
     }
 
     @Test
@@ -104,7 +112,10 @@ class NotificationEventConsumerTest {
 
         consumer.onProjectStateChange(event);
 
-        verify(messagingTemplate).convertAndSend(eq("/topic/user/user-456"), eq(event));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/user/user-456/notifications"), eq(event));
+        verify(messagingTemplate, never()).convertAndSend(
+                eq("/topic/project/null/state"), eq(event));
     }
 
     @Test

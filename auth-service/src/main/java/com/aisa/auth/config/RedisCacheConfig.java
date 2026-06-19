@@ -30,8 +30,8 @@ import org.springframework.data.redis.serializer.StringRedisSerializer;
  *
  * <p>Cache TTLs:
  * <ul>
- *   <li>{@code rolePermissions} — 30 seconds (must converge quickly after role change, Req 2.13)</li>
- *   <li>{@code userRoles} — 30 seconds (role assignment changes take effect within 5 s, Req 2.13)</li>
+ *   <li>{@code rolePermissions} — 5 seconds (must converge within 5s after role change, Req 2.13)</li>
+ *   <li>{@code userRoles} — 5 seconds (role assignment changes take effect within 5s, Req 2.13)</li>
  * </ul>
  *
  * <p>Cache eviction is triggered by {@link com.aisa.auth.service.RoleAssignmentService}
@@ -46,7 +46,7 @@ public class RedisCacheConfig {
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()
                 .prefixCacheNameWith("aisa:cache:auth:")
-                .entryTtl(Duration.ofSeconds(30))
+                .entryTtl(Duration.ofSeconds(5))
                 .serializeKeysWith(
                         RedisSerializationContext.SerializationPair.fromSerializer(new StringRedisSerializer()))
                 .serializeValuesWith(
@@ -55,10 +55,10 @@ public class RedisCacheConfig {
                 .disableCachingNullValues();
 
         RedisCacheConfiguration rolePermissionsConfig = defaultConfig
-                .entryTtl(Duration.ofSeconds(30));
+                .entryTtl(Duration.ofSeconds(5));
 
         RedisCacheConfiguration userRolesConfig = defaultConfig
-                .entryTtl(Duration.ofSeconds(30));
+                .entryTtl(Duration.ofSeconds(5));
 
         return RedisCacheManager.builder(connectionFactory)
                 .cacheDefaults(defaultConfig)

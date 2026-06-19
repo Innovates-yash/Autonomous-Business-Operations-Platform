@@ -9,7 +9,9 @@ import com.aisa.orchestrator.domain.GenerationRun;
 import com.aisa.orchestrator.domain.GenerationRunStatus;
 import com.aisa.orchestrator.domain.InvocationStatus;
 import com.aisa.orchestrator.kafka.AgentTaskMessage;
+import com.aisa.orchestrator.kafka.BlueprintAssemblySignal;
 import com.aisa.orchestrator.kafka.KafkaSubmissionService;
+import com.aisa.orchestrator.kafka.ProgressEvent;
 import com.aisa.orchestrator.kafka.SubmissionResult;
 import com.aisa.orchestrator.repository.AgentInvocationRepository;
 import com.aisa.orchestrator.repository.AgentOutputRepository;
@@ -447,8 +449,8 @@ class SagaExecutionServiceTest {
         }
 
         @Test
-        @DisplayName("on failure: marks run FAILED and skips transitive dependents")
-        void onFailure_haltsTransitiveDependents() {
+        @DisplayName("on failure with retries exhausted: marks run FAILED and skips transitive dependents")
+        void onFailure_exhausted_haltsTransitiveDependents() {
             // Arrange
             UUID projectId = UUID.randomUUID();
             GenerationRun run = createRunWithAllInvocations(projectId);
@@ -456,12 +458,15 @@ class SagaExecutionServiceTest {
 
             AgentInvocation reqInvocation = findInvocation(run, AgentType.REQUIREMENT_ANALYST);
             reqInvocation.setStatus(InvocationStatus.RUNNING);
+            // Set attempt count to MAX_ATTEMPTS so retries are exhausted
+            setField(reqInvocation, "attemptCount", SagaExecutionService.MAX_ATTEMPTS);
 
             when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
             when(agentInvocationRepository.save(any(AgentInvocation.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
             when(generationRunRepository.save(any(GenerationRun.class)))
                     .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
 
             // Act
             sagaExecutionService.handleAgentCompletion(
@@ -476,9 +481,6 @@ class SagaExecutionServiceTest {
                 AgentInvocation depInv = findInvocation(run, dependent);
                 assertThat(depInv.getStatus()).isEqualTo(InvocationStatus.SKIPPED);
             }
-
-            // No Kafka dispatch happens after failure
-            verify(kafkaSubmissionService, never()).submit(any(), any(), any());
         }
 
         @Test
@@ -627,6 +629,223 @@ class SagaExecutionServiceTest {
 
             // Assert — no dispatch (BUSINESS_ANALYST already running)
             verify(kafkaSubmissionService, never()).submit(any(), any(), any());
+        }
+    }
+
+    @Nested
+    @DisplayName("Retry logic (Req 6.5)")
+    class RetryLogic {
+
+        @Test
+        @DisplayName("failure at attempt 1 triggers retry (re-dispatch)")
+        void failureAtAttempt1_triggersRetry() {
+            UUID projectId = UUID.randomUUID();
+            GenerationRun run = createRunWithAllInvocations(projectId);
+            run.setStatus(GenerationRunStatus.RUNNING);
+
+            AgentInvocation reqInvocation = findInvocation(run, AgentType.REQUIREMENT_ANALYST);
+            reqInvocation.setStatus(InvocationStatus.RUNNING);
+            reqInvocation.setStartedAt(Instant.now().minusSeconds(5));
+            setField(reqInvocation, "attemptCount", 1); // first attempt
+
+            when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+            when(agentInvocationRepository.save(any(AgentInvocation.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
+
+            // Act
+            sagaExecutionService.handleAgentCompletion(
+                    run.getId(), AgentType.REQUIREMENT_ANALYST, false, null, Instant.now());
+
+            // Assert — NOT FAILED, agent re-dispatched (RUNNING after re-dispatch)
+            assertThat(reqInvocation.getStatus()).isEqualTo(InvocationStatus.RUNNING);
+            assertThat(reqInvocation.getAttemptCount()).isEqualTo(2); // incremented from 1 to 2
+            assertThat(run.getStatus()).isEqualTo(GenerationRunStatus.RUNNING); // run NOT failed
+
+            // Verify agent-tasks dispatch (retry)
+            verify(kafkaSubmissionService).submit(
+                    eq(KafkaTopics.AGENT_TASKS), any(), any());
+        }
+
+        @Test
+        @DisplayName("failure at attempt 4 (max) marks permanently FAILED")
+        void failureAtMaxAttempts_marksFailed() {
+            UUID projectId = UUID.randomUUID();
+            GenerationRun run = createRunWithAllInvocations(projectId);
+            run.setStatus(GenerationRunStatus.RUNNING);
+
+            AgentInvocation reqInvocation = findInvocation(run, AgentType.REQUIREMENT_ANALYST);
+            reqInvocation.setStatus(InvocationStatus.RUNNING);
+            setField(reqInvocation, "attemptCount", SagaExecutionService.MAX_ATTEMPTS);
+
+            when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+            when(agentInvocationRepository.save(any(AgentInvocation.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(generationRunRepository.save(any(GenerationRun.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
+
+            // Act
+            sagaExecutionService.handleAgentCompletion(
+                    run.getId(), AgentType.REQUIREMENT_ANALYST, false, null, Instant.now());
+
+            // Assert
+            assertThat(reqInvocation.getStatus()).isEqualTo(InvocationStatus.FAILED);
+            assertThat(run.getStatus()).isEqualTo(GenerationRunStatus.FAILED);
+        }
+
+        @Test
+        @DisplayName("failure at attempt 3 triggers final retry (attempt count becomes 4)")
+        void failureAtAttempt3_triggersLastRetry() {
+            UUID projectId = UUID.randomUUID();
+            GenerationRun run = createRunWithAllInvocations(projectId);
+            run.setStatus(GenerationRunStatus.RUNNING);
+
+            AgentInvocation reqInvocation = findInvocation(run, AgentType.REQUIREMENT_ANALYST);
+            reqInvocation.setStatus(InvocationStatus.RUNNING);
+            setField(reqInvocation, "attemptCount", 3); // third attempt
+
+            when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+            when(agentInvocationRepository.save(any(AgentInvocation.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
+
+            // Act
+            sagaExecutionService.handleAgentCompletion(
+                    run.getId(), AgentType.REQUIREMENT_ANALYST, false, null, Instant.now());
+
+            // Assert — retried (attempt 4)
+            assertThat(reqInvocation.getStatus()).isEqualTo(InvocationStatus.RUNNING);
+            assertThat(reqInvocation.getAttemptCount()).isEqualTo(4);
+            assertThat(run.getStatus()).isEqualTo(GenerationRunStatus.RUNNING);
+        }
+    }
+
+    @Nested
+    @DisplayName("Progress events and assembly signal (Req 6.7, 6.8)")
+    class ProgressAndAssembly {
+
+        @Test
+        @DisplayName("on success: publishes SUCCESS progress event to agent-progress topic")
+        void onSuccess_publishesProgressEvent() {
+            UUID projectId = UUID.randomUUID();
+            GenerationRun run = createRunWithAllInvocations(projectId);
+            run.setStatus(GenerationRunStatus.RUNNING);
+
+            AgentInvocation reqInvocation = findInvocation(run, AgentType.REQUIREMENT_ANALYST);
+            reqInvocation.setStatus(InvocationStatus.RUNNING);
+            reqInvocation.setStartedAt(Instant.now().minusSeconds(5));
+            setField(reqInvocation, "attemptCount", 1);
+
+            when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+            when(agentInvocationRepository.save(any(AgentInvocation.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
+
+            sagaExecutionService.handleAgentCompletion(
+                    run.getId(), AgentType.REQUIREMENT_ANALYST, true,
+                    "{\"output\": \"test\"}", Instant.now());
+
+            // Verify progress events published to agent-progress topic
+            // (SUCCESS for completed agent + STARTED for next dispatched agent)
+            verify(kafkaSubmissionService, times(2)).submit(
+                    eq(KafkaTopics.AGENT_PROGRESS), any(), payloadCaptor.capture());
+
+            // Find the SUCCESS progress event (filter out STARTED events from dispatch)
+            List<Object> allPayloads = payloadCaptor.getAllValues();
+            ProgressEvent successEvent = allPayloads.stream()
+                    .filter(p -> p instanceof ProgressEvent)
+                    .map(p -> (ProgressEvent) p)
+                    .filter(e -> e.eventType() == ProgressEvent.EventType.SUCCESS)
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(successEvent).isNotNull();
+            assertThat(successEvent.agentType()).isEqualTo(AgentType.REQUIREMENT_ANALYST);
+            assertThat(successEvent.generationRunId()).isEqualTo(run.getId());
+        }
+
+        @Test
+        @DisplayName("on all agents complete: publishes assembly signal")
+        void onAllComplete_publishesAssemblySignal() {
+            UUID projectId = UUID.randomUUID();
+            GenerationRun run = createRunWithAllInvocations(projectId);
+            run.setStatus(GenerationRunStatus.RUNNING);
+
+            // Mark all agents except DOCUMENTATION as complete
+            for (AgentType agentType : AgentType.values()) {
+                if (agentType != AgentType.DOCUMENTATION) {
+                    markSuccess(run, agentType, "{\"output\": \"" + agentType + "\"}");
+                }
+            }
+
+            AgentInvocation docInvocation = findInvocation(run, AgentType.DOCUMENTATION);
+            docInvocation.setStatus(InvocationStatus.RUNNING);
+            docInvocation.setStartedAt(Instant.now().minusSeconds(20));
+            setField(docInvocation, "attemptCount", 1);
+
+            when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+            when(agentInvocationRepository.save(any(AgentInvocation.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(generationRunRepository.save(any(GenerationRun.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
+
+            sagaExecutionService.handleAgentCompletion(
+                    run.getId(), AgentType.DOCUMENTATION, true,
+                    "{\"doc\": \"complete\"}", Instant.now());
+
+            // Verify assembly signal published to project-state-changes topic
+            verify(kafkaSubmissionService).submit(
+                    eq(KafkaTopics.PROJECT_STATE_CHANGES),
+                    eq(projectId.toString()),
+                    payloadCaptor.capture());
+
+            Object assemblyPayload = payloadCaptor.getAllValues().stream()
+                    .filter(p -> p instanceof BlueprintAssemblySignal)
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(assemblyPayload).isNotNull();
+            BlueprintAssemblySignal signal = (BlueprintAssemblySignal) assemblyPayload;
+            assertThat(signal.generationRunId()).isEqualTo(run.getId());
+            assertThat(signal.projectId()).isEqualTo(projectId);
+        }
+
+        @Test
+        @DisplayName("on retry: publishes RETRY progress event")
+        void onRetry_publishesRetryEvent() {
+            UUID projectId = UUID.randomUUID();
+            GenerationRun run = createRunWithAllInvocations(projectId);
+            run.setStatus(GenerationRunStatus.RUNNING);
+
+            AgentInvocation reqInvocation = findInvocation(run, AgentType.REQUIREMENT_ANALYST);
+            reqInvocation.setStatus(InvocationStatus.RUNNING);
+            setField(reqInvocation, "attemptCount", 1);
+
+            when(generationRunRepository.findById(run.getId())).thenReturn(Optional.of(run));
+            when(agentInvocationRepository.save(any(AgentInvocation.class)))
+                    .thenAnswer(inv -> inv.getArgument(0));
+            when(kafkaSubmissionService.submit(any(), any(), any())).thenReturn(ackResult());
+
+            sagaExecutionService.handleAgentCompletion(
+                    run.getId(), AgentType.REQUIREMENT_ANALYST, false, null, Instant.now());
+
+            // Verify RETRY progress event published
+            verify(kafkaSubmissionService, times(2)).submit(
+                    eq(KafkaTopics.AGENT_PROGRESS), any(), payloadCaptor.capture());
+
+            List<Object> progressPayloads = payloadCaptor.getAllValues();
+            ProgressEvent retryEvent = progressPayloads.stream()
+                    .filter(p -> p instanceof ProgressEvent)
+                    .map(p -> (ProgressEvent) p)
+                    .filter(e -> e.eventType() == ProgressEvent.EventType.RETRY)
+                    .findFirst()
+                    .orElse(null);
+
+            assertThat(retryEvent).isNotNull();
+            assertThat(retryEvent.agentType()).isEqualTo(AgentType.REQUIREMENT_ANALYST);
+            assertThat(retryEvent.attemptCount()).isEqualTo(1);
         }
     }
 }

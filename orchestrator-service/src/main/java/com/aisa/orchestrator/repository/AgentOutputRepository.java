@@ -1,9 +1,11 @@
 package com.aisa.orchestrator.repository;
 
 import com.aisa.orchestrator.domain.AgentOutput;
+import com.aisa.orchestrator.domain.AgentType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -18,4 +20,6 @@ import java.util.UUID;
 public interface AgentOutputRepository extends JpaRepository<AgentOutput, UUID> {
 
     Optional<AgentOutput> findByInvocationId(UUID invocationId);
+
+    List<AgentOutput> findByAgentType(AgentType agentType);
 }

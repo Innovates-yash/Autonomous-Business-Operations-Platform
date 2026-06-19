@@ -42,6 +42,14 @@ public class GenerationRun {
     @Column(name = "status", nullable = false, length = 32)
     private GenerationRunStatus status = GenerationRunStatus.PENDING;
 
+    /** When the generation run was actually started (first agent dispatched). */
+    @Column(name = "started_at")
+    private Instant startedAt;
+
+    /** When the generation run completed (all agents finished or run failed). */
+    @Column(name = "completed_at")
+    private Instant completedAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -93,6 +101,22 @@ public class GenerationRun {
 
     public void setStatus(GenerationRunStatus status) {
         this.status = status;
+    }
+
+    public Instant getStartedAt() {
+        return startedAt;
+    }
+
+    public void setStartedAt(Instant startedAt) {
+        this.startedAt = startedAt;
+    }
+
+    public Instant getCompletedAt() {
+        return completedAt;
+    }
+
+    public void setCompletedAt(Instant completedAt) {
+        this.completedAt = completedAt;
     }
 
     public Instant getCreatedAt() {

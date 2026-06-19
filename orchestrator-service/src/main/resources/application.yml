@@ -34,6 +34,13 @@ spring:
 # Redis auto-expires the lock so another replica re-queues work within 30s (Req 26.6).
 aisa:
   orchestrator:
+    # Per-agent invocation timeout: 120 seconds (Requirement 6.4).
+    agent-timeout-seconds: 120
+    # Maximum total attempts per agent: 1 initial + 3 retries (Requirement 6.5).
+    max-agent-attempts: 4
+    # Timeout scanner interval and initial delay (milliseconds).
+    timeout-scan-interval-ms: 15000
+    timeout-scan-initial-delay-ms: 30000
     lock:
       key-prefix: aisa:lock:orchestrator
       expire-after-ms: 120000

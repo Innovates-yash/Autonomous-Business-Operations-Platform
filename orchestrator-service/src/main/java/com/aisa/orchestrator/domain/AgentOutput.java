@@ -2,6 +2,8 @@ package com.aisa.orchestrator.domain;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
@@ -33,10 +35,19 @@ public class AgentOutput {
     @JoinColumn(name = "invocation_id", nullable = false, unique = true)
     private AgentInvocation invocation;
 
+    /** The agent type that produced this output, denormalized for efficient querying. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "agent_type", nullable = false, length = 32)
+    private AgentType agentType;
+
     /** The structured Design_Artifact content (JSON). Stored as LONGTEXT for large payloads. */
     @Lob
     @Column(name = "content", nullable = false, columnDefinition = "LONGTEXT")
     private String content;
+
+    /** Version counter for the output, supporting iterative refinement across generation runs. */
+    @Column(name = "version", nullable = false)
+    private int version = 1;
 
     @Column(name = "produced_at", nullable = false)
     private Instant producedAt;
@@ -47,6 +58,7 @@ public class AgentOutput {
 
     public AgentOutput(AgentInvocation invocation, String content) {
         this.invocation = invocation;
+        this.agentType = invocation.getAgentType();
         this.content = content;
         this.producedAt = Instant.now();
     }
@@ -55,6 +67,9 @@ public class AgentOutput {
     void onCreate() {
         if (this.producedAt == null) {
             this.producedAt = Instant.now();
+        }
+        if (this.agentType == null && this.invocation != null) {
+            this.agentType = this.invocation.getAgentType();
         }
     }
 
@@ -72,12 +87,28 @@ public class AgentOutput {
         this.invocation = invocation;
     }
 
+    public AgentType getAgentType() {
+        return agentType;
+    }
+
+    public void setAgentType(AgentType agentType) {
+        this.agentType = agentType;
+    }
+
     public String getContent() {
         return content;
     }
 
     public void setContent(String content) {
         this.content = content;
+    }
+
+    public int getVersion() {
+        return version;
+    }
+
+    public void setVersion(int version) {
+        this.version = version;
     }
 
     public Instant getProducedAt() {

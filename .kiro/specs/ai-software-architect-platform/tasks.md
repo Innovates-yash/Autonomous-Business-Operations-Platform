@@ -131,10 +131,10 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 8.1 Implement analysis initiation and generation
     - AI call producing ≥1 FR + ≥1 NFR within 60s, transition to Analyzing, use cases with traceability
     - _Requirements: 4.1, 4.2, 4.5, 4.6_
-  - [ ] 8.2 Implement clarifying questions, answer incorporation, and manual edits
+  - [x] 8.2 Implement clarifying questions, answer incorporation, and manual edits
     - 1–10 questions with references; regenerate affected requirements on answers; add/modify/remove while Analyzing; confirm transition
     - _Requirements: 4.3, 4.4, 4.7, 4.8_
-  - [ ] 8.3 Implement provider failure retry with state preservation
+  - [x] 8.3 Implement provider failure retry with state preservation
     - Retry up to 3 times; on exhaustion halt, preserve prior state and requirements, return provider-failure error
     - _Requirements: 4.9_
   - [ ]* 8.4 Write unit tests for analysis edge cases
@@ -145,10 +145,10 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 9.1 Create orchestration entities and dependency DAG
     - Define GenerationRun, AgentInvocation, AgentOutput; encode the ten-agent dependency DAG
     - _Requirements: 6.1, 6.2_
-  - [ ] 9.2 Implement Kafka saga engine with concurrency
+  - [x] 9.2 Implement Kafka saga engine with concurrency
     - Dependency-ordered invocation, prerequisite output passing, concurrent execution for independent agents, persist outputs for safe re-queue
     - _Requirements: 6.1, 6.2, 6.10_
-  - [ ] 9.3 Implement timeout, retry, halt, and recording
+  - [x] 9.3 Implement timeout, retry, halt, and recording
     - 120s timeout, 4-attempt max, halt transitive dependents on failure while preserving outputs, record timing/outcome, publish progress events, signal assembly on completion
     - _Requirements: 6.3, 6.4, 6.5, 6.6, 6.7, 6.8, 6.9_
   - [ ]* 9.4 Write property test for agent dependency order

@@ -9,7 +9,9 @@ import com.aisa.orchestrator.domain.GenerationRun;
 import com.aisa.orchestrator.domain.GenerationRunStatus;
 import com.aisa.orchestrator.domain.InvocationStatus;
 import com.aisa.orchestrator.kafka.AgentTaskMessage;
+import com.aisa.orchestrator.kafka.BlueprintAssemblySignal;
 import com.aisa.orchestrator.kafka.KafkaSubmissionService;
+import com.aisa.orchestrator.kafka.ProgressEvent;
 import com.aisa.orchestrator.repository.AgentInvocationRepository;
 import com.aisa.orchestrator.repository.AgentOutputRepository;
 import com.aisa.orchestrator.repository.GenerationRunRepository;
@@ -50,6 +52,9 @@ public class SagaExecutionService {
 
     private static final Logger log = LoggerFactory.getLogger(SagaExecutionService.class);
 
+    /** Maximum total attempts per agent invocation: 1 initial + 3 retries (Req 6.5). */
+    static final int MAX_ATTEMPTS = 4;
+
     private final GenerationRunRepository generationRunRepository;
     private final AgentInvocationRepository agentInvocationRepository;
     private final AgentOutputRepository agentOutputRepository;
@@ -82,6 +87,7 @@ public class SagaExecutionService {
 
         GenerationRun run = new GenerationRun(projectId);
         run.setStatus(GenerationRunStatus.RUNNING);
+        run.setStartedAt(Instant.now());
         run = generationRunRepository.save(run);
 
         // Create an invocation record for each agent in the DAG
@@ -162,15 +168,23 @@ public class SagaExecutionService {
         invocation.setOutput(output);
         agentInvocationRepository.save(invocation);
 
-        log.info("Agent {} completed successfully for run={}",
-                invocation.getAgentType(), run.getId());
+        log.info("Agent {} completed successfully for run={} (attempt {})",
+                invocation.getAgentType(), run.getId(), invocation.getAttemptCount());
+
+        // Publish SUCCESS progress event (Req 6.7)
+        publishProgressEvent(ProgressEvent.success(
+                run.getId(), run.getProjectId(), invocation.getAgentType(),
+                invocation.getAttemptCount(), MAX_ATTEMPTS));
 
         // Check if all agents are now complete
         if (isAllComplete(run)) {
             run.setStatus(GenerationRunStatus.COMPLETED);
+            run.setCompletedAt(Instant.now());
             generationRunRepository.save(run);
             log.info("All agents completed for run={}. Signalling Blueprint assembly.", run.getId());
-            // Blueprint assembly signal would be published here
+
+            // Publish Blueprint assembly signal (Req 6.8)
+            publishAssemblySignal(run);
             return;
         }
 
@@ -178,28 +192,116 @@ public class SagaExecutionService {
         dispatchReadyAgents(run);
     }
 
-    private void handleFailure(GenerationRun run, AgentInvocation invocation, Instant completedAt) {
+    /**
+     * Handles an agent failure with retry logic (Req 6.5).
+     *
+     * <p>If the agent has remaining attempts ({@code attemptCount < MAX_ATTEMPTS}),
+     * the invocation is reset to PENDING and re-dispatched. Otherwise, the invocation
+     * is marked FAILED, transitive dependents are halted, and the run is marked FAILED.
+     *
+     * @param run         the generation run
+     * @param invocation  the failed invocation
+     * @param completedAt when the failure occurred
+     */
+    void handleFailure(GenerationRun run, AgentInvocation invocation, Instant completedAt) {
+        handleFailure(run, invocation, completedAt, null);
+    }
+
+    /**
+     * Handles an agent failure with retry logic and an optional error message (Req 6.5).
+     */
+    void handleFailure(GenerationRun run, AgentInvocation invocation,
+                       Instant completedAt, String errorMessage) {
+        // Record error message on the invocation (Req 6.9)
+        if (errorMessage != null) {
+            invocation.setErrorMessage(errorMessage);
+        }
+
+        // Retry if attempts remain (Req 6.5: max 4 total attempts)
+        if (invocation.getAttemptCount() < MAX_ATTEMPTS) {
+            log.info("Agent {} failed on attempt {}/{} for run={}, will retry",
+                    invocation.getAgentType(), invocation.getAttemptCount(), MAX_ATTEMPTS, run.getId());
+
+            // Publish RETRY progress event (Req 6.7)
+            publishProgressEvent(ProgressEvent.retry(
+                    run.getId(), run.getProjectId(), invocation.getAgentType(),
+                    invocation.getAttemptCount(), MAX_ATTEMPTS, errorMessage));
+
+            // Reset to PENDING for re-dispatch
+            invocation.setStatus(InvocationStatus.PENDING);
+            invocation.setCompletedAt(null);
+            agentInvocationRepository.save(invocation);
+
+            // Re-dispatch the agent
+            Set<AgentType> completedAgents = getCompletedAgents(run);
+            dispatchAgent(run, invocation, completedAgents);
+            return;
+        }
+
+        // All retries exhausted — mark as permanently FAILED
         invocation.setStatus(InvocationStatus.FAILED);
         invocation.setCompletedAt(completedAt);
         agentInvocationRepository.save(invocation);
 
-        log.warn("Agent {} failed for run={}", invocation.getAgentType(), run.getId());
+        log.warn("Agent {} exhausted all {} attempts for run={}",
+                invocation.getAgentType(), MAX_ATTEMPTS, run.getId());
 
-        // Halt all transitive dependents (Req 6.6)
-        Set<AgentType> transitives = dependencyDag.getTransitiveDependents(invocation.getAgentType());
+        // Publish FAILED progress event (Req 6.7)
+        publishProgressEvent(ProgressEvent.failed(
+                run.getId(), run.getProjectId(), invocation.getAgentType(),
+                invocation.getAttemptCount(), MAX_ATTEMPTS, errorMessage));
+
+        // Halt all transitive dependents while preserving their outputs (Req 6.6)
+        haltTransitiveDependents(run, invocation);
+
+        // Mark the run as FAILED
+        run.setStatus(GenerationRunStatus.FAILED);
+        run.setCompletedAt(Instant.now());
+        generationRunRepository.save(run);
+    }
+
+    /**
+     * Handles an agent timeout. Marks the invocation as TIMED_OUT and triggers
+     * the retry/failure flow (Req 6.4).
+     *
+     * @param run        the generation run
+     * @param invocation the timed-out invocation
+     */
+    void handleTimeout(GenerationRun run, AgentInvocation invocation) {
+        log.warn("Agent {} timed out on attempt {}/{} for run={}",
+                invocation.getAgentType(), invocation.getAttemptCount(), MAX_ATTEMPTS, run.getId());
+
+        // Publish TIMED_OUT progress event (Req 6.7)
+        publishProgressEvent(ProgressEvent.timedOut(
+                run.getId(), run.getProjectId(), invocation.getAgentType(),
+                invocation.getAttemptCount(), MAX_ATTEMPTS));
+
+        // Timeout counts as a failure — delegate to retry/failure logic
+        handleFailure(run, invocation, Instant.now(),
+                "Agent did not respond within the timeout period");
+    }
+
+    /**
+     * Halts all transitive dependents of a failed agent, marking them SKIPPED
+     * while preserving any outputs already produced (Req 6.6).
+     */
+    private void haltTransitiveDependents(GenerationRun run, AgentInvocation failedInvocation) {
+        Set<AgentType> transitives = dependencyDag.getTransitiveDependents(failedInvocation.getAgentType());
         for (AgentType dependent : transitives) {
             AgentInvocation depInvocation = findInvocation(run, dependent);
             if (depInvocation.getStatus() == InvocationStatus.PENDING) {
                 depInvocation.setStatus(InvocationStatus.SKIPPED);
                 agentInvocationRepository.save(depInvocation);
+
+                // Publish SKIPPED progress event (Req 6.7)
+                publishProgressEvent(ProgressEvent.skipped(
+                        run.getId(), run.getProjectId(), dependent,
+                        failedInvocation.getAgentType().name()));
+
                 log.info("Skipped agent {} (transitive dependent of failed {})",
-                        dependent, invocation.getAgentType());
+                        dependent, failedInvocation.getAgentType());
             }
         }
-
-        // Mark the run as FAILED
-        run.setStatus(GenerationRunStatus.FAILED);
-        generationRunRepository.save(run);
     }
 
     /**
@@ -253,6 +355,11 @@ public class SagaExecutionService {
         // Publish to agent-tasks topic
         String key = run.getId().toString();
         kafkaSubmissionService.submit(KafkaTopics.AGENT_TASKS, key, message);
+
+        // Publish STARTED progress event (Req 6.7)
+        publishProgressEvent(ProgressEvent.started(
+                run.getId(), run.getProjectId(), agentType,
+                invocation.getAttemptCount(), MAX_ATTEMPTS));
 
         log.info("Dispatched agent {} for run={} (attempt {})",
                 agentType, run.getId(), invocation.getAttemptCount());
@@ -317,11 +424,51 @@ public class SagaExecutionService {
         return true;
     }
 
-    private AgentInvocation findInvocation(GenerationRun run, AgentType agentType) {
+    AgentInvocation findInvocation(GenerationRun run, AgentType agentType) {
         return run.getInvocations().stream()
                 .filter(inv -> inv.getAgentType() == agentType)
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException(
                         "No invocation found for agent " + agentType + " in run " + run.getId()));
+    }
+
+    // --- Progress event and assembly signal publishing ---
+
+    /**
+     * Publishes a progress event to the agent-progress Kafka topic.
+     * Failures are logged but do not halt saga progression (best-effort).
+     */
+    private void publishProgressEvent(ProgressEvent event) {
+        try {
+            kafkaSubmissionService.submit(
+                    KafkaTopics.AGENT_PROGRESS,
+                    event.generationRunId().toString(),
+                    event);
+            log.debug("Published progress event: run={} agent={} type={}",
+                    event.generationRunId(), event.agentType(), event.eventType());
+        } catch (Exception e) {
+            // Best-effort: progress events are informational. Don't fail the saga.
+            log.warn("Failed to publish progress event for run={} agent={}: {}",
+                    event.generationRunId(), event.agentType(), e.getMessage());
+        }
+    }
+
+    /**
+     * Publishes a Blueprint assembly signal when all agents complete (Req 6.8).
+     */
+    private void publishAssemblySignal(GenerationRun run) {
+        try {
+            BlueprintAssemblySignal signal = BlueprintAssemblySignal.of(
+                    run.getId(), run.getProjectId());
+            kafkaSubmissionService.submit(
+                    KafkaTopics.PROJECT_STATE_CHANGES,
+                    run.getProjectId().toString(),
+                    signal);
+            log.info("Published Blueprint assembly signal for run={} project={}",
+                    run.getId(), run.getProjectId());
+        } catch (Exception e) {
+            log.error("Failed to publish assembly signal for run={}: {}",
+                    run.getId(), e.getMessage(), e);
+        }
     }
 }
