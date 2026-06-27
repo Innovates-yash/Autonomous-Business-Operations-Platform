@@ -71,9 +71,14 @@ class FailedWorkRequeueSchedulerTest {
         FailedWorkItem item = new FailedWorkItem(
                 "agent-tasks", "project-123", "{\"data\":\"test\"}", "java.lang.String", "original error");
 
+        java.util.List<FailedWorkItemStatus> capturedStatuses = new java.util.ArrayList<>();
         when(failedWorkItemRepository.findByStatusOrderByCreatedAtAsc(FailedWorkItemStatus.PENDING))
                 .thenReturn(List.of(item));
-        when(failedWorkItemRepository.save(any(FailedWorkItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(failedWorkItemRepository.save(any(FailedWorkItem.class))).thenAnswer(inv -> {
+            FailedWorkItem arg = inv.getArgument(0);
+            capturedStatuses.add(arg.getStatus());
+            return arg;
+        });
 
         SendResult<String, Object> sendResult = createSendResult("agent-tasks", 0, 42L);
         CompletableFuture<SendResult<String, Object>> future = CompletableFuture.completedFuture(sendResult);
@@ -86,8 +91,7 @@ class FailedWorkRequeueSchedulerTest {
         verify(failedWorkItemRepository, times(2)).save(itemCaptor.capture());
         List<FailedWorkItem> savedItems = itemCaptor.getAllValues();
 
-        assertThat(savedItems.get(0).getStatus()).isEqualTo(FailedWorkItemStatus.RETRYING);
-        assertThat(savedItems.get(1).getStatus()).isEqualTo(FailedWorkItemStatus.COMPLETED);
+        assertThat(capturedStatuses).containsExactly(FailedWorkItemStatus.RETRYING, FailedWorkItemStatus.COMPLETED);
         assertThat(savedItems.get(1).getRetryCount()).isEqualTo(1);
     }
 
@@ -98,9 +102,14 @@ class FailedWorkRequeueSchedulerTest {
         FailedWorkItem item = new FailedWorkItem(
                 "agent-tasks", "project-456", "{\"important\":\"data\"}", "java.lang.String", "broker down");
 
+        java.util.List<FailedWorkItemStatus> capturedStatuses = new java.util.ArrayList<>();
         when(failedWorkItemRepository.findByStatusOrderByCreatedAtAsc(FailedWorkItemStatus.PENDING))
                 .thenReturn(List.of(item));
-        when(failedWorkItemRepository.save(any(FailedWorkItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(failedWorkItemRepository.save(any(FailedWorkItem.class))).thenAnswer(inv -> {
+            FailedWorkItem arg = inv.getArgument(0);
+            capturedStatuses.add(arg.getStatus());
+            return arg;
+        });
 
         CompletableFuture<SendResult<String, Object>> future = new CompletableFuture<>();
         future.completeExceptionally(new org.apache.kafka.common.errors.TimeoutException("Broker not available"));
@@ -113,8 +122,7 @@ class FailedWorkRequeueSchedulerTest {
         verify(failedWorkItemRepository, times(2)).save(itemCaptor.capture());
         List<FailedWorkItem> savedItems = itemCaptor.getAllValues();
 
-        assertThat(savedItems.get(0).getStatus()).isEqualTo(FailedWorkItemStatus.RETRYING);
-        assertThat(savedItems.get(1).getStatus()).isEqualTo(FailedWorkItemStatus.PENDING);
+        assertThat(capturedStatuses).containsExactly(FailedWorkItemStatus.RETRYING, FailedWorkItemStatus.PENDING);
         assertThat(savedItems.get(1).getRetryCount()).isEqualTo(1);
         // Data is retained in the entity — not lost
         assertThat(savedItems.get(1).getPayload()).isEqualTo("{\"important\":\"data\"}");
@@ -131,9 +139,14 @@ class FailedWorkRequeueSchedulerTest {
             item.incrementRetryCount();
         }
 
+        java.util.List<FailedWorkItemStatus> capturedStatuses = new java.util.ArrayList<>();
         when(failedWorkItemRepository.findByStatusOrderByCreatedAtAsc(FailedWorkItemStatus.PENDING))
                 .thenReturn(List.of(item));
-        when(failedWorkItemRepository.save(any(FailedWorkItem.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(failedWorkItemRepository.save(any(FailedWorkItem.class))).thenAnswer(inv -> {
+            FailedWorkItem arg = inv.getArgument(0);
+            capturedStatuses.add(arg.getStatus());
+            return arg;
+        });
 
         CompletableFuture<SendResult<String, Object>> future = new CompletableFuture<>();
         future.completeExceptionally(new RuntimeException("Still down"));
@@ -146,7 +159,7 @@ class FailedWorkRequeueSchedulerTest {
         verify(failedWorkItemRepository, times(2)).save(itemCaptor.capture());
         List<FailedWorkItem> savedItems = itemCaptor.getAllValues();
 
-        assertThat(savedItems.get(1).getStatus()).isEqualTo(FailedWorkItemStatus.EXHAUSTED);
+        assertThat(capturedStatuses).containsExactly(FailedWorkItemStatus.RETRYING, FailedWorkItemStatus.EXHAUSTED);
         assertThat(savedItems.get(1).getRetryCount()).isEqualTo(5);
         // Data is still retained even when exhausted
         assertThat(savedItems.get(1).getPayload()).isEqualTo("{\"data\":\"critical\"}");

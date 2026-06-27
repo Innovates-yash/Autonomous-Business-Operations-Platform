@@ -36,6 +36,9 @@ class ChatServiceTest {
     @Mock
     private ChatMessageRepository chatMessageRepository;
 
+    @Mock
+    private com.aisa.chat.repository.ChatContextRedisRepository chatContextRedisRepository;
+
     private ChatService chatService;
 
     private static final UUID USER_ID = UUID.randomUUID();
@@ -44,7 +47,7 @@ class ChatServiceTest {
 
     @BeforeEach
     void setUp() {
-        chatService = new ChatService(conversationRepository, chatMessageRepository);
+        chatService = new ChatService(conversationRepository, chatMessageRepository, chatContextRedisRepository, 20);
     }
 
     @Test
