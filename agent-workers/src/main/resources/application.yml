@@ -67,6 +67,8 @@ aisa:
   agent:
     invocation-timeout-seconds: 120
     max-attempts: 4
+  provider-gateway:
+    base-url: ${PROVIDER_GATEWAY_URL:http://localhost:8084}
 
 ---
 # ===================== dev =====================
