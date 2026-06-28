@@ -84,6 +84,24 @@ management:
     web:
       exposure:
         include: health,info,prometheus
+  endpoint:
+    health:
+      # Enable Kubernetes liveness/readiness probe endpoints (Requirements 28.7, 28.8, 28.9).
+      # K8s probes target /actuator/health/liveness and /actuator/health/readiness with
+      # periodSeconds=10, timeoutSeconds=10, failureThreshold=3.
+      probes:
+        enabled: true
+      show-details: when-authorized
+      group:
+        liveness:
+          include: livenessState
+        readiness:
+          include: readinessState,redis
+  health:
+    livenessState:
+      enabled: true
+    readinessState:
+      enabled: true
   metrics:
     tags:
       application: ${spring.application.name}
