@@ -377,7 +377,7 @@ Top-level tasks are epics; decimal sub-tasks are the executable units. Test sub-
   - [x] 29.1 Configure automated backups and restore
     - Backups ≤24h interval, ≥30-day retention, recorded with id+timestamp; retry 3x with Admin alert; restore ≤60 min, abort+preserve on failure with alert
     - _Requirements: 28.1, 28.2, 28.3, 28.4, 28.5, 28.6_
-  - [ ] 29.2 Configure health checks and HA routing
+  - [x] 29.2 Configure health checks and HA routing
     - K8s probes ≤30s interval / ≤10s timeout; 3 consecutive failures → unhealthy → route away ≤30s; multi-AZ; rolling deployments
     - _Requirements: 28.7, 28.8, 28.9_
   - [ ]* 29.3 Write unit tests for backup retry and health classification
